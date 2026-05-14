@@ -13,16 +13,17 @@ let pendingRequests = new Map();     // requestId -> {resolve, reject, timer}
 let activeTabId = null;
 let connected = false;
 let reconnectTimer = null;
+let keepAliveTimer = null;
 
 // ============================================================
 // WebSocket 连接管理
 // ============================================================
 
 async function getBridgeUrl() {
-  const { bridgeHost, bridgePort } = await chrome.storage.local.get([
-    'bridgeHost', 'bridgePort'
-  ]);
-  return `ws://${bridgeHost || CONFIG.bridgeHost}:${bridgePort || CONFIG.bridgePort}/extension`;
+  // WebSocket 端口固定为 CONFIG.bridgePort (8643)
+  // 不从 chrome.storage 读端口 — 用户弹窗存的是 HTTP API 端口 (8642)
+  const { bridgeHost } = await chrome.storage.local.get(['bridgeHost']);
+  return `ws://${bridgeHost || CONFIG.bridgeHost}:${CONFIG.bridgePort}/extension`;
 }
 
 async function connect() {
@@ -156,6 +157,10 @@ async function executeBrowserAction(action, params) {
       return await actionWait(params);
     case 'get_active_tab':
       return await getActiveTab();
+    case 'inject':
+      return await actionInject(params);
+    case 'reload_and_inject':
+      return await actionReloadAndInject(params);
     default:
       throw new Error(`Unknown action: ${action}`);
   }
@@ -303,6 +308,30 @@ async function actionWait(params) {
   return { waited: ms };
 }
 
+// --- 注入内容脚本到当前页面 ---
+// 注：content.js 已通过 manifest.json content_scripts 自动注入
+// 此函数仅用于确认通信通道已建立
+
+async function actionInject(params) {
+  const tab = await ensureActiveTab();
+  try {
+    // 尝试发送 ping 确认 content.js 已加载
+    const resp = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
+    return { injected: true, tabId: tab.id, url: tab.url };
+  } catch (err) {
+    return { injected: false, reason: 'content script not responding', tabId: tab.id };
+  }
+}
+
+// --- 刷新页面 + 确保内容脚本 ---
+
+async function actionReloadAndInject(params) {
+  const tab = await ensureActiveTab();
+  await chrome.tabs.reload(tab.id);
+  await waitForTabLoad(tab.id);
+  return { reloaded: true, tabId: tab.id };
+}
+
 // ============================================================
 // 辅助函数
 // ============================================================
@@ -376,6 +405,28 @@ function rejectAllPending(reason) {
 // ============================================================
 // 扩展生命周期事件
 // ============================================================
+
+// 自动连接 + 迁移: SW 每次启动都执行，不依赖 install/activate 事件
+(function autoInit() {
+  // 迁移: 清除存储里可能错误的端口值
+  chrome.storage.local.get(['bridgePort'], (items) => {
+    if (items.bridgePort && items.bridgePort !== '8643') {
+      chrome.storage.local.remove('bridgePort');
+    }
+  });
+
+  // 自动连接
+  setTimeout(() => connect(), 500);
+
+  // 周期心跳: 保持连接存活 + 防止 Chrome 回收 SW
+  keepAliveTimer = setInterval(() => {
+    if (connected && ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'ping' }));
+    } else if (!connected) {
+      connect();
+    }
+  }, 25000);
+})();
 
 // 监听来自 popup 的连接/断开请求
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
