@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Hermes Browser Bridge Server
-
+Hermes Browser Bridge Server — v1.1
 架构: Hermes Agent(me) → HTTP POST → Bridge Server → WebSocket → Chrome Extension
+              ↕ (agent 轮询)                         ↕ (扩展推送)
+            pending_actions_queue          context_menu_action / tab_changed
 依赖: python3 内置 + websockets 库
 
 用法: python3 bridge-server.py [--port 8642]
@@ -39,6 +40,10 @@ pending = {}        # request_id -> asyncio.Event
 responses = {}      # request_id -> dict
 ws_loop = None      # asyncio event loop (WebSocket线程)
 
+# 新增: 扩展推送给 Agent 的消息队列
+pending_agent_actions = []      # list of dict (context_menu_action, tab_changed, etc.)
+agent_actions_lock = threading.Lock()
+
 # ============================================================
 # WebSocket: Extension 连接到这里
 # ============================================================
@@ -53,12 +58,56 @@ async def handle_extension(ws):
         async for raw in ws:
             try:
                 msg = json.loads(raw)
-                if msg.get('type') == 'browser_action_response':
+                msg_type = msg.get('type', '')
+
+                if msg_type == 'browser_action_response':
+                    # 命令响应 → 唤醒等待的 HTTP 请求
                     rid = msg.get('request_id')
                     if rid and rid in pending:
                         responses[rid] = msg
                         pending[rid].set()
                         pending.pop(rid, None)
+
+                elif msg_type == 'context_menu_action':
+                    # 用户右键菜单 → 存入队列供 Agent 轮询
+                    with agent_actions_lock:
+                        pending_agent_actions.append({
+                            'type': 'context_menu_action',
+                            'id': msg.get('request_id', uuid.uuid4().hex[:12]),
+                            'data': msg.get('data', {}),
+                            'timestamp': datetime.now().isoformat(),
+                        })
+                        # 最多保留 50 条
+                        if len(pending_agent_actions) > 50:
+                            pending_agent_actions = pending_agent_actions[-50:]
+                    log.info(f'📋 Context menu action queued: {msg.get("data", {}).get("action", "?")}')
+
+                elif msg_type == 'tab_changed':
+                    # 标签页变化通知 → 存入队列
+                    with agent_actions_lock:
+                        pending_agent_actions.append({
+                            'type': 'tab_changed',
+                            'id': uuid.uuid4().hex[:12],
+                            'data': msg.get('data', {}),
+                            'timestamp': datetime.now().isoformat(),
+                        })
+                        if len(pending_agent_actions) > 50:
+                            pending_agent_actions = pending_agent_actions[-50:]
+
+                elif msg_type == 'ping':
+                    # 心跳 → 回复 pong
+                    try:
+                        await ws.send(json.dumps({'type': 'pong'}))
+                    except:
+                        pass
+
+                elif msg_type == 'pong':
+                    # 心跳响应 — 无需处理
+                    pass
+
+                else:
+                    log.debug(f'Unknown message type: {msg_type}')
+
             except json.JSONDecodeError:
                 pass
     except:
@@ -101,14 +150,39 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b)
 
     def do_GET(self):
-        if urlparse(self.path).path == '/status':
+        path = urlparse(self.path).path
+
+        if path == '/status':
             self._json(200, {
                 'status': 'running',
                 'extension_connected': ext_connected,
-                'pending': len(pending),
+                'pending_requests': len(pending),
+                'pending_actions': len(pending_agent_actions),
+                'version': '1.1',
             })
+
+        elif path == '/pending_actions':
+            # Agent 轮询获取扩展推送的上下文菜单操作
+            with agent_actions_lock:
+                # 一次性取走所有待处理动作
+                actions = list(pending_agent_actions)
+                pending_agent_actions.clear()
+            self._json(200, {
+                'actions': actions,
+                'count': len(actions),
+            })
+
+        elif path == '/pending_actions/peek':
+            # 预览但不消费
+            with agent_actions_lock:
+                actions = list(pending_agent_actions)
+            self._json(200, {
+                'actions': actions[-10:],  # 只看最近10条
+                'total': len(actions),
+            })
+
         else:
-            self._json(404, {'error': 'Not found'})
+            self._json(404, {'error': 'Not found. Available: /status, /pending_actions, /pending_actions/peek'})
 
     def do_POST(self):
         if urlparse(self.path).path != '/action':
@@ -186,7 +260,7 @@ def main():
     parser.add_argument('--host', type=str, default='127.0.0.1')
     args = parser.parse_args()
 
-    log.info(f'🚀 Hermes Bridge Server: {args.host}:{args.port}')
+    log.info(f'🚀 Hermes Bridge Server v1.1: {args.host}:{args.port}')
 
     # 启动 WebSocket 线程 (port + 1)
     t = threading.Thread(target=ws_thread_fn, args=(args.host, args.port + 1), daemon=True)
@@ -194,9 +268,10 @@ def main():
 
     # 启动 HTTP（主线程）
     httpd = HTTPServer((args.host, args.port), Handler)
-    log.info(f'  HTTP API:  http://{args.host}:{args.port}/action')
-    log.info(f'  WebSocket: ws://{args.host}:{args.port + 1}/extension')
-    log.info(f'  Status:    http://{args.host}:{args.port}/status')
+    log.info(f'  HTTP API:   http://{args.host}:{args.port}/action')
+    log.info(f'  WebSocket:  ws://{args.host}:{args.port + 1}/extension')
+    log.info(f'  Status:     http://{args.host}:{args.port}/status')
+    log.info(f'  Pending:    http://{args.host}:{args.port}/pending_actions')
     httpd.serve_forever()
 
 

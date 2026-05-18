@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --fg: #e0e0e0;
+      --accent: #6366f1;
+      --green: #22c55e;
+      --red: #ef4444;
+      --gray: #6b7280;
+      --card: #1e1e36;
+      --border: #2d2d44;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      padding: 12px;
+      min-height: 100vh;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: var(--card);
+      border: 1px solid var(--border);
+    }
+    .status-badge .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--gray);
+    }
+    .status-badge .dot.connected { background: var(--green); }
+    .status-badge .dot.disconnected { background: var(--red); }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .card-title {
+      font-size: 11px;
+      color: var(--gray);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .card-content {
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .tab-info {
+      word-break: break-all;
+    }
+    .tab-info .url {
+      font-size: 11px;
+      color: var(--accent);
+      margin-top: 2px;
+      display: block;
+    }
+
+    .action-log {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .action-log::-webkit-scrollbar {
+      width: 4px;
+    }
+    .action-log::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 2px;
+    }
+    .action-item {
+      display: flex;
+      align-items: start;
+      gap: 8px;
+      padding: 6px 0;
+      font-size: 11px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .action-item:last-child { border-bottom: none; }
+    .action-icon { width: 16px; text-align: center; flex-shrink: 0; }
+    .action-name { color: var(--accent); font-weight: 500; }
+    .action-status.ok { color: var(--green); }
+    .action-status.error { color: var(--red); }
+    .action-time { color: var(--gray); font-size: 10px; margin-left: auto; white-space: nowrap; }
+
+    .quick-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .quick-btn {
+      flex: 1;
+      min-width: 80px;
+      padding: 8px 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--fg);
+      font-size: 11px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .quick-btn:hover {
+      background: var(--border);
+      border-color: var(--accent);
+    }
+    .quick-btn:active { transform: scale(0.97); }
+
+    .empty-state {
+      text-align: center;
+      padding: 24px 0;
+      color: var(--gray);
+      font-size: 12px;
+    }
+
+    .log-clear {
+      font-size: 10px;
+      color: var(--gray);
+      cursor: pointer;
+      float: right;
+    }
+    .log-clear:hover { color: var(--red); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔌 Hermes Bridge</h1>
+    <div class="status-badge" id="statusBadge">
+      <span class="dot disconnected" id="statusDot"></span>
+      <span id="statusLabel">Disconnected</span>
+    </div>
+  </div>
+
+  <!-- 当前标签页 -->
+  <div class="card">
+    <div class="card-title">当前页面</div>
+    <div class="card-content tab-info">
+      <span id="tabTitle">未检测到标签页</span>
+      <span class="url" id="tabUrl"></span>
+    </div>
+  </div>
+
+  <!-- 快捷操作 -->
+  <div class="card">
+    <div class="card-title">快捷操作</div>
+    <div class="quick-actions">
+      <button class="quick-btn" id="btnConnect">🔗 连接</button>
+      <button class="quick-btn" id="btnDisconnect" disabled>⛓️ 断开</button>
+      <button class="quick-btn" id="btnSummarize">📝 总结</button>
+      <button class="quick-btn" id="btnRefresh">🔄 刷新</button>
+    </div>
+  </div>
+
+  <!-- 最近操作 -->
+  <div class="card">
+    <div class="card-title">
+      最近操作
+      <span class="log-clear" id="btnClearLog">清空</span>
+    </div>
+    <div class="action-log" id="actionLog">
+      <div class="empty-state">暂无操作记录</div>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

@@ -27,7 +27,7 @@ description: "Build, develop, and debug the Hermes Browser Extension — a Chrom
 
 1. **扩展是桥接层，不包含 AI 逻辑** — 所有智能在 Hermes Agent 端，扩展只做翻译和执行
 2. **WebSocket 是生命线** — 连接管理（重连、心跳、状态机）是最高优先级
-3. **最小权限原则** — 只请求 `activeTab` 和 `scripting`，不为便利扩展权限
+3. **最小权限原则** — 只请求 `activeTab` 和 `storage`，不为便利扩展权限
 4. **人类化优先** — Phase 4 不是可选项，是生产环境的必备条件
 5. **Manifest V3 是硬约束** — 所有代码必须遵循 Manifest V3 的 Service Worker 生命周期限制
 6. **用户可见状态** — Popup 必须始终显示连接状态，不允许"静默失败"
