@@ -155,7 +155,7 @@ Then in Settings → Bridge section → Connect. The agent can then send browser
 | `api.anthropic.com` | Anthropic Claude API calls |
 | `generativelanguage.googleapis.com` | Google Gemini API calls |
 | `api.x.ai` | xAI Grok API calls |
-| `api.moonshot.ai` | Kimi (Moonshot) API calls |
+| `api.moonshot.ai` / `api.moonshot.cn` | Kimi (Moonshot) API calls |
 
 All API calls go directly from the user's browser to the selected provider using the user's own API key. No proxy, no backend, no data collection.
 
@@ -170,7 +170,7 @@ All API calls go directly from the user's browser to the selected provider using
 - **Images not stored** — pasted images are used for the current message only, not saved to conversation history
 - **Bridge mode is local-only** — WebSocket connects to `127.0.0.1` only
 
-Privacy Policy: https://raw.githubusercontent.com/simonwar119-wq/hermes-browser-bridge/main/PRIVACY_POLICY.md
+Privacy Policy source: `PRIVACY_POLICY.md`
 
 ---
 

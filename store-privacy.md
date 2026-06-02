@@ -5,7 +5,7 @@
 > 粘贴到"隐私权规范"标签页的"单一用途"输入框。
 
 ```
-Hermes Browser Bridge 的唯一用途是作为本地 Hermes AI Agent 与用户浏览器之间的桥接工具。它通过本地 WebSocket 连接接收 Agent 指令，在用户当前标签页中执行网页导航、内容读取、截图、点击、表单填写等操作，并将结果返回给 Agent。所有通信仅发生在本地（127.0.0.1），不收集、不传输、不存储任何用户数据。
+Hermes AI Assistant 的唯一用途是帮助用户在浏览器侧边栏中完成网页理解和浏览器操作，包括：分析当前页面内容、回答与当前页面相关的问题、执行用户主动发起的浏览器操作（如截图、导航、点击、滚动、表单填写），以及在可选的本地 Bridge 模式下连接到用户自己机器上的本地 Hermes Agent 服务。扩展不运行开发者自有代理服务器；AI 请求只会在用户主动发送时直接发往用户选定的 AI 提供商。
 ```
 
 ## 权限理由
@@ -15,13 +15,13 @@ Hermes Browser Bridge 的唯一用途是作为本地 Hermes AI Agent 与用户�
 ### sidePanel
 
 ```
-sidePanel 权限用于在浏览器侧边栏显示连接状态、当前页面信息和操作日志。用户可通过侧边栏实时查看扩展与 Bridge Server 的连接状态，以及最近执行的浏览器操作记录。所有信息仅显示在用户本地浏览器中，不传输到任何外部服务器。
+sidePanel 权限用于在浏览器右侧显示 Hermes AI Assistant 的主界面。用户通过侧边栏查看当前页面信息、与 AI 对话、执行截图/导航/点击/表单填写等浏览器操作，并在需要时触发本地 Bridge 功能。
 ```
 
 ### contextMenus
 
 ```
-contextMenus 权限用于在用户右键菜单中添加"让 Hermes 分析当前页面""让 Hermes 处理选中文字""让 Hermes 总结本页"等快捷指令。用户通过右键菜单主动触发操作，将其发送给本地 Hermes Agent 处理。此权限仅用于创建菜单项和响应点击事件，不读取、不收集任何上下文信息。
+contextMenus 权限用于在用户右键菜单中添加“总结本页”“分析本页”等快捷操作。用户主动点击后，扩展会打开侧边栏并基于当前页面内容执行相应请求。
 ```
 
 ## 隐私政策 URL
@@ -29,11 +29,23 @@ contextMenus 权限用于在用户右键菜单中添加"让 Hermes 分析当前�
 > 粘贴到"隐私权规范"标签页的"隐私政策"输入框。
 
 ```
-https://raw.githubusercontent.com/simonwar119-wq/hermes-browser-bridge/refs/heads/main/PRIVACY_POLICY.md
+请不要再填写 raw.githubusercontent.com 的 Markdown 链接。
 ```
 
-如果标准 URL 还不能访问，先用这个带 `/refs/heads/main/` 的版本，等几分钟后试试标准 URL：
+建议改成一个可公开访问的 HTML 页面，例如：
 
 ```
-https://raw.githubusercontent.com/simonwar119-wq/hermes-browser-bridge/main/PRIVACY_POLICY.md
+https://<your-public-domain>/privacy-policy.html
+```
+
+如果你用 GitHub Pages，可以把本仓库里的 `privacy-policy.html` 发布后填写：
+
+```
+https://<your-github-pages-domain>/privacy-policy.html
+```
+
+如果你直接用这个仓库开启 GitHub Pages（Source 选 `main` 分支的 `/docs` 目录），则推荐填写：
+
+```
+https://<your-github-username>.github.io/hermes-browser-bridge/privacy-policy.html
 ```

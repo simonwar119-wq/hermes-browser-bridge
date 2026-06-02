@@ -1,10 +1,10 @@
-# Chrome Web Store — 提交文档 (v3.1)
+# Chrome Web Store — 提交文档 (v3.1.1)
 
 ## 版本说明
 
-- **版本号**: 3.1.0
-- **核心功能**: AI 聊天 + 浏览器直接控制（无需 Bridge Server）
-- **AI 服务**: DeepSeek API（用户自行填入 API Key）
+- **版本号**: 3.1.1
+- **核心功能**: AI 聊天 + 浏览器直接控制 + 可选本地 Bridge
+- **AI 服务**: 用户自行选择并填入 API Key（DeepSeek / OpenAI / Anthropic / Gemini / Grok / Kimi）
 
 ---
 
@@ -13,14 +13,15 @@
 > 粘贴到"隐私权规范"标签页的"单一用途"输入框。
 
 ```
-Hermes AI Assistant 是一款 AI 聊天和浏览器控制扩展，使用 DeepSeek API 提供智能对话。
+Hermes AI Assistant 是一款浏览器侧边栏扩展，用于帮助用户理解当前网页并执行用户主动发起的浏览器操作。
 
 主要功能：
-1. AI 聊天（需 DeepSeek API Key）：在侧边栏与 AI 对话，分析当前页面内容、总结要点、翻译页面。
-2. 浏览器控制（无需 API Key）：通过聊天命令或工具栏按钮直接控制浏览器——截图、导航到指定网址、点击页面元素、填写表单、滚动页面。
-3. Bridge 模式（可选，需本地 Hermes Agent）：通过 WebSocket 连接本地服务器，供自动化脚本控制浏览器。
+1. AI 聊天：用户可在侧边栏询问当前页面内容、总结要点、翻译页面、分析信息，并使用自己填写的 API Key 直接连接所选 AI 提供商。
+2. 浏览器控制：用户可主动触发截图、导航、点击、滚动、读取页面文本、填写表单等操作。
+3. 智能填表：用户可保存本地资料，并在网页表单页主动触发自动填写。
+4. Bridge 模式（可选）：连接用户自己机器上的本地 Hermes Agent 服务。
 
-所有 AI 请求通过 HTTPS 发送至 api.deepseek.com。浏览器控制操作完全在本地执行，不涉及任何网络请求。
+AI 请求只会在用户主动发送时，直接从浏览器发往用户选定的 AI 提供商。扩展不运行开发者自有代理服务器。
 ```
 
 ---
@@ -54,19 +55,19 @@ tabs 权限用于：(1) 在侧边栏显示当前页面的标题和 URL；(2) Bri
 ### storage
 
 ```
-storage 权限用于在用户本地保存：DeepSeek API Key、选定的 AI 模型、对话历史（最多20条）、Bridge 服务器地址配置。所有数据仅存储在用户本地浏览器中，不上传至任何服务器。
+storage 权限用于在用户本地保存：用户自行填写的 API Key、选定的 AI 模型、对话历史（最多20条）、表单填写资料、Bridge 服务器地址配置。所有数据仅存储在用户本地浏览器中，不上传到开发者自有服务器。
 ```
 
 ### host_permissions (<all_urls>)
 
 ```
-<all_urls> 权限用于内容脚本在任意页面执行操作：读取页面文本、点击元素、填写表单、滚动页面。这些操作仅在用户通过聊天命令或工具栏按钮主动触发时执行。
+<all_urls> 权限用于内容脚本在用户当前访问的网页上执行用户主动发起的操作，包括读取页面文本、截图辅助、点击元素、填写表单、滚动页面，以及识别表单结构。这些操作不会在后台自动运行。
 ```
 
-### host_permissions (https://api.deepseek.com/*)
+### host_permissions (AI provider domains)
 
 ```
-此权限用于从侧边栏向 DeepSeek API 发送 AI 聊天请求（需用户提供 API Key）。仅在用户发送聊天消息时触发，不在后台自动发送任何数据。
+这些 host 权限仅用于在用户发送聊天请求时，直接连接到用户自己选择的 AI 提供商接口，例如 DeepSeek、OpenAI、Anthropic、Gemini、xAI Grok、Moonshot / Kimi。扩展不通过开发者自有中转服务器转发任何请求。
 ```
 
 ---
@@ -74,7 +75,19 @@ storage 权限用于在用户本地保存：DeepSeek API Key、选定的 AI 模�
 ## 隐私政策 URL
 
 ```
-https://raw.githubusercontent.com/simonwar119-wq/hermes-browser-bridge/main/PRIVACY_POLICY.md
+请填写一个可公开访问、可在浏览器中直接打开的 HTML 隐私政策页面，不要继续使用 raw.githubusercontent.com 的 Markdown 链接。
+```
+
+建议：
+
+```
+https://<your-public-domain>/privacy-policy.html
+```
+
+如果你直接用 GitHub Pages 发布本仓库的 `/docs` 目录，链接通常会是：
+
+```
+https://<your-github-username>.github.io/hermes-browser-bridge/privacy-policy.html
 ```
 
 ---
@@ -111,12 +124,12 @@ Type commands directly in the chat or use toolbar buttons:
 Connect to a local Hermes Agent server via WebSocket for external automation scripts.
 
 🔒 Privacy
-• AI requests go only to api.deepseek.com (HTTPS, requires your API Key)
+• AI requests go only to the AI provider selected by the user (HTTPS, requires the user's API Key)
 • Browser control runs entirely locally — no network requests
 • No analytics, no tracking, no data collection
 • API Key stored locally in your browser only
 
-Setup: Click the extension icon → Open AI side panel → Enter your DeepSeek API Key in Settings. Browser control works immediately without any setup.
+Setup: Click the extension icon → Open the AI side panel → Enter an API Key for the provider you want to use in Settings. Browser control works locally when the user explicitly triggers it.
 ```
 
 ---

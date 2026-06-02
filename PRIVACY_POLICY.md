@@ -1,94 +1,126 @@
-# Hermes Browser Bridge — 隐私政策
+# Hermes AI Assistant Privacy Policy
 
-**最后更新：2026-05-22**
+Last updated: June 2, 2026
 
----
+## Overview
 
-## 概述
+Hermes AI Assistant is a Chrome extension that provides:
 
-Hermes Browser Bridge v2.0（以下简称"本扩展"）是一个**浏览器内置 AI 工具**，使用 Chrome 的**设备端 AI（Gemini Nano）**进行页面总结和分析。所有 AI 处理在您本地设备上完成，**不发送任何数据到外部服务器**。
+- AI chat about the current webpage
+- Browser actions initiated by the user, such as reading page text, taking screenshots, navigating, clicking, scrolling, and filling forms
+- Optional local Bridge mode for connecting to a local Hermes Agent service running on the user's machine
 
-**双重模式：**
-- **🤖 AI Mode（默认）** — 页面总结/分析使用 Chrome 内置 AI，完全离线、零数据传输
-- **🔌 Bridge Mode（可选）** — 连接本地 Hermes Agent，实现浏览器自动化控制（仅限高级用户）
+The extension does not operate its own backend proxy. When AI features are used, requests go directly from the user's browser to the AI provider selected and configured by the user.
 
----
+## Data We Collect
 
-## 数据收集
+Hermes AI Assistant does not collect, sell, or share user data for the developer's own purposes.
 
-本扩展 **绝不收集** 以下任何信息：
+We do not run analytics, tracking, advertising, telemetry, or remote logging.
 
-- ❌ 个人身份信息（姓名、邮箱、电话等）
-- ❌ 浏览历史或访问记录
-- ❌ Cookie 或登录凭据
-- ❌ 键盘输入或表单内容
-- ❌ 设备信息或系统配置
-- ❌ IP 地址或网络位置
-- ❌ 使用统计或行为分析
+## Data Processed by the Extension
 
----
+Depending on which features the user actively invokes, the extension may process:
 
-## 数据传输
+- Current page title and URL
+- Visible page text
+- User-entered chat messages
+- User-provided API keys for supported AI providers
+- User-provided profile/form-fill data stored locally in Chrome
+- User-selected attachments that they explicitly add to a chat message
+- Screenshots captured by the user
 
-### AI Mode（默认）
-- **所有 AI 处理** 使用 Chrome 内置的 Gemini Nano 模型，在您的本地设备上运行
-- **零**数据离开您的设备
-- **无需任何网络连接**即可使用总结/分析功能
+This processing happens locally in the browser except when the user explicitly sends an AI request.
 
-### Bridge Mode（可选，需手动启用）
-- WebSocket 通信**仅连接本地地址（127.0.0.1）**：
-  - `ws://127.0.0.1:8643` — 连接本地 Hermes Bridge Server
-- **所有通信在本地完成，不经过任何外部服务器**
+## How Data Is Used
 
----
+The extension uses data only to provide the user-requested functionality:
 
-## 权限说明
+- To answer questions about the current page
+- To summarize, analyze, translate, or explain webpage content
+- To carry out browser actions requested by the user
+- To help fill forms using user-supplied profile information
+- To connect to a local Bridge service if the user enables Bridge mode
 
-| 权限 | 用途 | 数据访问范围 |
-|------|------|------------|
-| `activeTab` | 读取当前页面内容供 AI 处理 | 仅用户点击"总结"/"分析"时的当前标签页 |
-| `tabs` | 导航、查询标签页状态 | 仅在用户明确操作下使用 |
-| `storage` | 保存 Bridge 服务器配置 | 仅用户手动输入的 IP 和端口号 |
-| `sidePanel` | 侧边栏显示连接状态和操作记录 | 仅本地显示，不传输 |
-| `contextMenus` | 右键菜单快捷操作 | 仅响应点击事件，不收集数据 |
-| `ai` | 访问 Chrome 内置 AI（Gemini Nano） | AI 处理完全在设备端完成 |
-| `<all_urls>` | 在任意页面执行内容脚本 | 仅用于在 Bridge 模式下执行用户指定的页面操作 |
+## AI Providers and Data Transfer
 
----
+When the user sends a chat request, relevant content may be sent directly to the AI provider chosen by the user. This can include:
 
-## 第三方服务
+- The user's message
+- The current page title and URL
+- Page text excerpted from the current tab
+- User-attached text files or excerpts
 
-本扩展**不集成任何第三方服务、分析工具、广告平台或外部 API**。
+Supported providers may include:
 
-AI 处理使用 Chrome 内置的 Gemini Nano 模型，完全在设备端运行。无需外部 AI API 密钥。
+- DeepSeek
+- OpenAI
+- Anthropic
+- Google Gemini
+- xAI Grok
+- Moonshot / Kimi
 
----
+The extension does not forward these requests through any Hermes-controlled server.
 
-## 数据保留
+Users are responsible for reviewing the privacy terms of the AI provider they choose to use.
 
-- 页面内容仅在"总结"/"分析"操作期间临时保存在 Chrome Storage 中
-- 操作完成后立即删除
-- 唯一持久化数据：Bridge 服务器地址配置（仅 Bridge 模式下使用）
+## Local Storage
 
----
+The extension stores the following locally in Chrome storage on the user's device:
 
-## 儿童隐私
+- API keys entered by the user
+- Selected provider and model
+- Recent conversation history
+- Form-fill profile data entered by the user
+- Optional Bridge host configuration
 
-本扩展不面向 13 岁以下儿童，也不收集任何年龄段的个人身份信息。
+These items are stored locally for product functionality and are not uploaded to any Hermes-controlled server.
 
----
+## Bridge Mode
 
-## 变更
+If the user enables Bridge mode, the extension connects only to a local service endpoint, such as:
 
-隐私政策的任何变更将在本页面更新。由于本扩展不收集数据，实质性变更的可能性极低。
+- `ws://127.0.0.1:8643`
 
----
+Bridge mode is optional and is intended for local automation only.
 
-## 联系
+## Permissions
 
-- 项目地址：https://github.com/nousresearch/hermes-agent
-- 或通过 Chrome Web Store 页面反馈
+The extension requests browser permissions only to support user-invoked features:
 
----
+- `activeTab`: access the current tab when the user invokes an action
+- `tabs`: read tab metadata and navigate or activate tabs
+- `scripting`: inject the content script when needed on normal webpages
+- `storage`: save user settings locally
+- `sidePanel`: display the extension interface in the browser side panel
+- `contextMenus`: provide right-click shortcuts
+- `alarms`: keep the optional Bridge reconnection logic alive
+- `<all_urls>`: read or interact with webpages when the user requests it
 
-**总结：纯本地 AI 工具。零数据收集，零外部传输，零第三方服务。AI 在您的设备上运行，无需任何 API 密钥。**
+## What We Do Not Do
+
+We do not:
+
+- Sell user data
+- Use user data for advertising
+- Use user data for credit or lending decisions
+- Build behavioral profiles
+- Collect browsing history for analytics
+- Send data to a developer-owned backend for storage or analysis
+
+## User Control
+
+Users control whether to:
+
+- Enter an API key
+- Send a chat request
+- Attach files
+- Capture a screenshot
+- Enable Bridge mode
+- Save local form-fill profile data
+
+Users may remove local settings by clearing extension storage or uninstalling the extension.
+
+## Contact
+
+If you have questions about this privacy policy, contact the developer through the Chrome Web Store listing or the public project repository.
