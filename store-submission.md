@@ -1,118 +1,138 @@
-# Chrome Web Store — 提交材料
+# Chrome Web Store — 提交文档 (v3.1)
 
-## 基本信息
+## 版本说明
 
-| 字段 | 值 |
-|------|-----|
-| **标题** | Hermes Browser Bridge |
-| **摘要** | 让 Hermes Agent 通过本地 WebSocket 控制浏览器 — 导航、读取、截图、点击、填写表单 |
-| **语言** | 中文（简体） |
-| **类别** | 开发者工具 (Developer Tools) |
+- **版本号**: 3.1.0
+- **核心功能**: AI 聊天 + 浏览器直接控制（无需 Bridge Server）
+- **AI 服务**: DeepSeek API（用户自行填入 API Key）
 
 ---
 
-## 说明（Description）— 中英双语
+## 单一用途说明
 
-### 中文（建议使用此版本提交）
-
-```
-Hermes Browser Bridge 是一个轻量级 Chrome 扩展，作为 Hermes AI Agent 与浏览器之间的桥梁。它让 AI 助手能够安全地控制您的浏览器，实现网页导航、内容读取、截图、点击、表单填写等操作——所有通信仅发生在本地，不经过任何外部服务器。
-
-== 工作原理 ==
-Hermes Bridge 在您的电脑上建立一个本地 WebSocket 连接。Hermes Agent（通过本地的桥接服务器）发送指令，扩展在您的当前标签页中执行操作并返回结果。整个过程完全在本地完成，您的数据不会离开您的电脑。
-
-== 主要功能 ==
-• 网页导航 — 自动跳转到指定 URL
-• 内容读取 — 读取页面正文和结构化数据
-• 截图 — 捕获当前可见标签页
-• 点击元素 — 通过 CSS 选择器或文字内容精准点击
-• 表单填写 — 模拟真人逐字输入，支持防检测
-• 数据提取 — 按选择器批量提取结构化信息
-• 类人交互 — 随机延迟、鼠标轨迹模拟、非线性滚动，降低被反爬机制标记的风险
-
-== 适用场景 ==
-• AI Agent 自动化测试
-• 网页数据采集与分析
-• 浏览器自动化操作
-• 与 Hermes Agent 配合完成复杂工作流
-
-== 隐私与安全 ==
-• 所有通信仅连接本地 127.0.0.1，绝不访问外部网络
-• 不收集任何用户数据
-• 不读取 Cookie 或登录凭据
-• 不需要代理/VPN 配置
-• 开源透明，可审计
-
-== 使用前提 ==
-需要同时运行 Hermes Bridge Server（Python，开源）。
-```
-
-### English (备用)
+> 粘贴到"隐私权规范"标签页的"单一用途"输入框。
 
 ```
-Hermes Browser Bridge is a lightweight Chrome extension that acts as a bridge between Hermes AI Agent and your browser. It enables AI assistants to safely control browser operations — navigation, content reading, screenshots, clicking, form filling — all through local-only communication.
+Hermes AI Assistant 是一款 AI 聊天和浏览器控制扩展，使用 DeepSeek API 提供智能对话。
 
-== How It Works ==
-The extension establishes a local WebSocket connection on your machine. Hermes Agent sends instructions via a local bridge server, the extension executes them in your current tab, and returns results. Your data never leaves your computer.
+主要功能：
+1. AI 聊天（需 DeepSeek API Key）：在侧边栏与 AI 对话，分析当前页面内容、总结要点、翻译页面。
+2. 浏览器控制（无需 API Key）：通过聊天命令或工具栏按钮直接控制浏览器——截图、导航到指定网址、点击页面元素、填写表单、滚动页面。
+3. Bridge 模式（可选，需本地 Hermes Agent）：通过 WebSocket 连接本地服务器，供自动化脚本控制浏览器。
 
-== Features ==
-• Page navigation to any URL
-• Read page content and structured data
-• Take screenshots of visible tabs
-• Click elements by CSS selector or text content
-• Fill forms with human-like typing simulation
-• Extract structured data by selectors
-• Anti-detection: random delays, mouse movement simulation, non-linear scrolling
-
-== Privacy & Security ==
-• All communication is local-only (127.0.0.1)
-• Zero data collection
-• No cookie or credential access
-• Open source and auditable
-
-== Requirements ==
-Requires Hermes Bridge Server (Python, open source) to be running locally.
+所有 AI 请求通过 HTTPS 发送至 api.deepseek.com。浏览器控制操作完全在本地执行，不涉及任何网络请求。
 ```
 
 ---
 
-## 五个安装理由（用于说明栏）
+## 权限理由
 
-请着重说明该内容的用途以及用户为何应该安装它：
+### sidePanel
 
-**1. 让你自己的 AI 真正"看见"网页**
-大多数 AI 工具只能读文本或需要 API。Hermes Browser Bridge 让你的 AI Agent 能像真人一样打开浏览器、看页面、点按钮、填表单——整个过程在你的本地电脑上完成。
+```
+sidePanel 权限用于在浏览器右侧显示 Hermes AI 聊天面板。用户点击扩展图标或工具栏按钮打开侧边栏，在其中进行 AI 对话、查看页面信息、执行浏览器控制操作。
+```
 
-**2. 零数据泄露风险**
-所有通信仅连接 127.0.0.1（你的本机），不经过任何外部服务器。不收集数据、不读取 Cookie、不记录操作历史。你的隐私由你的电脑物理隔离保护。
+### contextMenus
 
-**3. 类人交互，降低被网站封号的风险**
-内置鼠标轨迹模拟、随机延迟、非线性滚动、逐字输入等反检测机制。行为模式接近真实用户，而不是冷冰冰的爬虫。
+```
+contextMenus 权限用于在右键菜单中添加"用 Hermes AI 总结本页"和"用 Hermes AI 分析本页"快捷操作。用户通过右键菜单主动触发，点击后自动打开侧边栏并执行相应分析。
+```
 
-**4. 开源可控，不限功能和调用次数**
-代码完全开源（GitHub），你可以审计每一行代码。不像 SaaS 自动化工具那样按次收费、限制调用次数。想用多少次就用多少次。
+### activeTab
 
-**5. 与 Hermes AI Agent 生态无缝集成**
-原生支持 Hermes Agent（本地运行的 AI 助手）的指令协议。你只需要告诉 AI"去这个网站找 XXX"，它就会自动导航、搜索、提取数据——真正的 AI 浏览器自动化。
+```
+activeTab 权限用于：(1) 在用户点击总结/分析按钮时读取当前标签页文字内容供 AI 分析；(2) 执行浏览器控制命令（点击、填表、截图、滚动）时操作当前页面。所有操作均需用户主动触发。
+```
 
-| 主分类 | 子分类 | 理由 |
-|--------|--------|------|
-| **Developer Tools** | — | AI Agent 辅助开发工具，网页自动化 |
-| 备选：Productivity | — | 如果开发者工具被拒 |
+### tabs
+
+```
+tabs 权限用于：(1) 在侧边栏显示当前页面的标题和 URL；(2) Bridge 模式下 Hermes Agent 需要查询和切换标签页；(3) 导航命令需要在当前标签页打开指定网址并等待加载完成。
+```
+
+### storage
+
+```
+storage 权限用于在用户本地保存：DeepSeek API Key、选定的 AI 模型、对话历史（最多20条）、Bridge 服务器地址配置。所有数据仅存储在用户本地浏览器中，不上传至任何服务器。
+```
+
+### host_permissions (<all_urls>)
+
+```
+<all_urls> 权限用于内容脚本在任意页面执行操作：读取页面文本、点击元素、填写表单、滚动页面。这些操作仅在用户通过聊天命令或工具栏按钮主动触发时执行。
+```
+
+### host_permissions (https://api.deepseek.com/*)
+
+```
+此权限用于从侧边栏向 DeepSeek API 发送 AI 聊天请求（需用户提供 API Key）。仅在用户发送聊天消息时触发，不在后台自动发送任何数据。
+```
 
 ---
 
-## 商店图标（Store Icon）
+## 隐私政策 URL
 
-已有文件：`icons/icon-128.png`（128x128 纯色）
-**建议：** 直接用我们生成的图标。如果想更好看，可以找个在线工具把紫色底换成渐变色或加个"B"字母。
+```
+https://raw.githubusercontent.com/simonwar119-wq/hermes-browser-bridge/main/PRIVACY_POLICY.md
+```
 
 ---
 
-## 屏幕截图（Screenshots）
+## 简短描述（132 字符以内）
 
-需要 1-5 张 1280x800 或 640x400 的截图。我来生成几张演示图：
+```
+AI chat & browser controller. Chat with DeepSeek AI about any page. Navigate, screenshot, click, and fill forms directly from the panel.
+```
 
-1. **主界面** — 扩展弹窗的截图（连接状态）
-2. **测试页面** — test-detection.html 的运行结果
-3. **终端演示** — 桥接服务器 + curl 测试命令
+## 详细描述
+
+```
+Hermes AI Assistant — AI Chat & Browser Controller
+
+Open the side panel to chat with DeepSeek AI about any webpage, and control your browser directly without needing any external server.
+
+🤖 AI Chat (requires DeepSeek API Key)
+• Chat about the current page — summarize, analyze, translate, explain
+• Streaming responses with Markdown rendering
+• Conversation history preserved across sessions
+• Quick-action buttons: Summary, Key Points, Translate, Analyze, Explain
+
+🖥️ Browser Control (no API Key needed)
+Type commands directly in the chat or use toolbar buttons:
+• 📷 Screenshot — capture the current page and view inline
+• 🌐 Navigate — go to any URL in the current tab
+• 🖱️ Click — click any page element by CSS selector or text
+• ✏️ Fill — type into form fields with human-like simulation
+• ↕️ Scroll — scroll the page up or down
+• 📄 Read — extract the page's text content
+
+🔌 Bridge Mode (optional, advanced)
+Connect to a local Hermes Agent server via WebSocket for external automation scripts.
+
+🔒 Privacy
+• AI requests go only to api.deepseek.com (HTTPS, requires your API Key)
+• Browser control runs entirely locally — no network requests
+• No analytics, no tracking, no data collection
+• API Key stored locally in your browser only
+
+Setup: Click the extension icon → Open AI side panel → Enter your DeepSeek API Key in Settings. Browser control works immediately without any setup.
+```
+
+---
+
+## 截图说明（建议更新）
+
+1. **screenshot-1-chat.png** — 侧边栏 AI 聊天界面，显示对话消息和快捷按钮
+2. **screenshot-2-browser-control.png** — 使用截图命令后在聊天中显示页面截图
+3. **screenshot-3-navigate.png** — 输入"导航到 google.com"后成功导航的结果
+4. **screenshot-4-settings.png** — 设置面板，显示 DeepSeek API Key 输入框
+
+---
+
+## 审核注意事项
+
+- 扩展使用 DeepSeek API（`api.deepseek.com`），需用户自行申请并填入 API Key
+- AI 功能需要 API Key，浏览器控制功能不需要 API Key
+- Bridge 模式完全可选，不影响主功能使用
+- 内容脚本的 DOM 操作仅在用户主动触发命令时执行

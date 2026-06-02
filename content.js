@@ -39,6 +39,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 const handlers = {};
 
+handlers.ping = async () => ({
+  ok: true,
+  href: window.location.href,
+  title: document.title,
+});
+
+handlers.debug_page = async () => {
+  const main = document.querySelector('main, article, [role="main"], .content, #content, .main-content');
+  const text = main ? main.innerText : document.body.innerText || '';
+  return {
+    ok: true,
+    href: window.location.href,
+    title: document.title,
+    readyState: document.readyState,
+    textLength: text.length,
+    bodyLength: (document.body?.innerText || '').length,
+    mainFound: !!main,
+  };
+};
+
 // ============================================================
 // 读取页面内容
 // ============================================================
@@ -116,8 +136,12 @@ handlers.fill = async (msg) => {
   const el = findElement(selector);
   if (!el) throw new Error(`Element not found: "${selector}"`);
 
+  if (el instanceof HTMLSelectElement) {
+    return await handleSelectFill(el, value);
+  }
+
   if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
-    throw new Error(`Element is not an input/textarea: ${el.tagName}`);
+    throw new Error(`Element is not an input/textarea/select: ${el.tagName}`);
   }
 
   // 滚动到视图
@@ -165,6 +189,16 @@ handlers.fill = async (msg) => {
   await randomDelay(100, 200);
 
   return { filled: true, length: value.length, humanLike: humanLike !== false };
+};
+
+handlers.select = async (msg) => {
+  const { selector, value } = msg;
+  const el = findElement(selector);
+  if (!el) throw new Error(`Element not found: "${selector}"`);
+  if (!(el instanceof HTMLSelectElement)) {
+    throw new Error(`Element is not a select: ${el.tagName}`);
+  }
+  return await handleSelectFill(el, value);
 };
 
 // ============================================================
@@ -361,6 +395,39 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function handleSelectFill(el, value) {
+  await humanScroll(el);
+  await randomDelay(150, 300);
+
+  el.focus();
+  await randomDelay(50, 120);
+
+  const stringValue = String(value ?? '');
+  const options = Array.from(el.options);
+  const matched = options.find((option) =>
+    option.value === stringValue ||
+    option.text.trim() === stringValue ||
+    option.textContent?.trim() === stringValue
+  );
+
+  if (!matched) {
+    throw new Error(`Select option not found: "${stringValue}"`);
+  }
+
+  el.value = matched.value;
+  matched.selected = true;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  await randomDelay(120, 240);
+
+  return {
+    filled: true,
+    type: 'select',
+    value: matched.value,
+    label: matched.text.trim(),
+  };
+}
+
 // ============================================================
 // 辅助函数 — DOM查找
 // ============================================================
@@ -385,6 +452,147 @@ function findElement(selector) {
 
   return document.querySelector(selector);
 }
+
+// ============================================================
+// 结构化页面读取（供 AI 理解页面内容：标题/表格/表单）
+// ============================================================
+
+handlers.read_structured = async () => {
+  const parts = [];
+
+  // 1. 标题层级 → Markdown
+  document.querySelectorAll('h1, h2, h3, h4').forEach(h => {
+    const t = h.innerText?.trim();
+    if (t && t.length < 200) {
+      parts.push('#'.repeat(+h.tagName[1]) + ' ' + t);
+    }
+  });
+
+  // 2. 表格 → Markdown 表格（保留行列关系）
+  document.querySelectorAll('table').forEach(tbl => {
+    const rows = Array.from(tbl.querySelectorAll('tr'));
+    if (!rows.length) return;
+    parts.push('');
+    rows.forEach((row, ri) => {
+      const cells = Array.from(row.querySelectorAll('td, th'))
+        .map(c => (c.innerText || '').trim().replace(/\|/g, '｜').replace(/\n/g, ' '));
+      if (!cells.length) return;
+      parts.push('| ' + cells.join(' | ') + ' |');
+      if (ri === 0) parts.push('|' + cells.map(() => '---').join('|') + '|');
+    });
+    parts.push('');
+  });
+
+  // 3. 表单字段列表
+  const formFields = [];
+  document.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select').forEach(el => {
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return;
+    let label = '';
+    if (el.id) label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText?.trim() || '';
+    if (!label) label = el.getAttribute('aria-label') || el.placeholder || el.name || '';
+    if (!label) return;
+    const type = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : (el.type || 'text');
+    formFields.push(`• [${type}] ${label.slice(0, 80)}`);
+  });
+  if (formFields.length) {
+    parts.push('\n## 页面表单字段');
+    parts.push(...formFields);
+  }
+
+  // 4. 正文文本（去重、截断）
+  const bodyText = (document.body?.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
+
+  const combined = parts.join('\n').trim() + '\n\n' + bodyText;
+
+  return {
+    text:  combined.slice(0, 12000),
+    title: document.title,
+    url:   window.location.href,
+  };
+};
+
+// ============================================================
+// 扫描页面表单字段（供 AI 自动填表使用）
+// ============================================================
+
+handlers.scan_forms = async () => {
+  const SKIP_TYPES = new Set(['hidden', 'submit', 'button', 'image', 'reset']);
+  const fields = [];
+  const seen = new Set();
+
+  const els = document.querySelectorAll('input, textarea, select');
+
+  for (const el of els) {
+    if (SKIP_TYPES.has(el.type)) continue;
+
+    // 跳过不可见元素
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+
+    // 生成最优选择器
+    let selector = '';
+    if (el.id) {
+      selector = '#' + CSS.escape(el.id);
+    } else if (el.name) {
+      // name 可能重复，加 type 区分
+      const sameNames = document.querySelectorAll(`[name="${el.name}"]`);
+      selector = sameNames.length === 1
+        ? `[name="${el.name}"]`
+        : `[name="${el.name}"]:nth-of-type(${Array.from(sameNames).indexOf(el) + 1})`;
+    } else if (el.getAttribute('aria-label')) {
+      selector = `[aria-label="${el.getAttribute('aria-label')}"]`;
+    } else {
+      // fallback: 在父元素中的位置
+      const tag  = el.tagName.toLowerCase();
+      const idx  = Array.from(el.parentNode.querySelectorAll(tag)).indexOf(el) + 1;
+      selector   = `${tag}:nth-of-type(${idx})`;
+    }
+    if (seen.has(selector)) continue;
+    seen.add(selector);
+
+    // 提取标签文字：label[for] > aria-label > placeholder > 相邻文本
+    let label = '';
+    if (el.id) {
+      const lEl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+      if (lEl) label = lEl.innerText.trim();
+    }
+    if (!label) label = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') && document.getElementById(el.getAttribute('aria-labelledby'))?.innerText || '';
+    if (!label) label = el.getAttribute('placeholder') || '';
+    if (!label) {
+      // 向上查找最近的含文字节点
+      let node = el.parentElement;
+      for (let i = 0; i < 4 && node; i++) {
+        const lEl = node.querySelector('label, [class*="label"], [class*="title"], legend');
+        if (lEl && lEl.innerText.trim()) { label = lEl.innerText.trim(); break; }
+        node = node.parentElement;
+      }
+    }
+    if (!label && el.name) label = el.name.replace(/[-_]/g, ' ');
+
+    const field = {
+      label:    label.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').slice(0, 120),
+      type:     el.tagName === 'SELECT'   ? 'select'
+              : el.tagName === 'TEXTAREA' ? 'textarea'
+              : (el.type   || 'text'),
+      selector,
+      value:    el.value || '',
+      required: el.required || false,
+    };
+
+    if (el.tagName === 'SELECT') {
+      field.options = Array.from(el.options).slice(0, 40)
+        .map(o => `${o.value}|${o.text.trim()}`)
+        .filter(Boolean);
+    }
+
+    fields.push(field);
+  }
+
+  return { fields, url: window.location.href, title: document.title };
+};
 
 // ============================================================
 // 暴露自检接口（供测试页调用）

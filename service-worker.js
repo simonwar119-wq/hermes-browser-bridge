@@ -1,25 +1,217 @@
-// Hermes Browser Bridge — Service Worker v1.1
-// 负责: WebSocket连接管理 ↔ 消息路由到Content Script ↔ Hermes Agent通信
-// 关键修复: chrome.alarms 持久心跳防止SW被回收 + 指数退避重连
+// Hermes AI Assistant — Service Worker v3.0
+// 功能：点击图标打开侧边栏、上下文菜单、页面内容获取、Bridge WebSocket 连接
+
+// ============================================================
+// 配置
+// ============================================================
 
 const CONFIG = {
+  // Bridge 连接
   bridgeHost: '127.0.0.1',
-  bridgePort: 8643,         // WebSocket端口 (HTTP API在8642)
-  reconnectBaseDelay: 1000, // 初始重连等待(ms)
-  reconnectMaxDelay: 30000,  // 最大重连等待(ms)
-  responseTimeout: 30000,   // 命令超时(ms)
-  keepAliveInterval: 20,    // chrome.alarms 周期(秒) — 保持SW存活
+  bridgePort: 8643,
+  reconnectBaseDelay: 1000,
+  reconnectMaxDelay: 30000,
+  keepAliveInterval: 20, // 秒
 };
 
+// ============================================================
+// 状态
+// ============================================================
+
 let ws = null;
-let pendingRequests = new Map();     // requestId -> {resolve, reject, timer}
-let activeTabId = null;
 let connected = false;
 let reconnectAttempts = 0;
 let reconnectTimer = null;
 
 // ============================================================
-// WebSocket 连接管理
+// 点击图标直接打开侧边栏
+// ============================================================
+
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+
+// ============================================================
+// 上下文菜单
+// ============================================================
+
+function ensureContextMenus() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: 'hermes-summarize',
+      title: '🤖 用 Hermes AI 总结本页',
+      contexts: ['page'],
+    });
+    chrome.contextMenus.create({
+      id: 'hermes-analyze',
+      title: '💬 用 Hermes AI 分析本页',
+      contexts: ['page'],
+    });
+    chrome.contextMenus.create({
+      id: 'hermes-send-page',
+      title: '发送给 Hermes Agent',
+      contexts: ['page'],
+    });
+    chrome.contextMenus.create({
+      id: 'hermes-send-selection',
+      title: '处理选中文字',
+      contexts: ['selection'],
+    });
+  });
+}
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  // AI 功能：向侧边栏发消息触发快捷操作
+  if (info.menuItemId === 'hermes-summarize') {
+    // 先打开侧边栏，再发送动作消息
+    try {
+      await chrome.sidePanel.open({ windowId: tab.windowId });
+    } catch (e) { /* 侧边栏可能已打开 */ }
+    // 短暂延迟等侧边栏加载完毕
+    setTimeout(() => {
+      chrome.runtime.sendMessage({
+        type: 'quick_action',
+        action: 'summarize',
+      }).catch(() => {});
+    }, 800);
+    return;
+  }
+
+  if (info.menuItemId === 'hermes-analyze') {
+    try {
+      await chrome.sidePanel.open({ windowId: tab.windowId });
+    } catch (e) { /* 侧边栏可能已打开 */ }
+    setTimeout(() => {
+      chrome.runtime.sendMessage({
+        type: 'quick_action',
+        action: 'analyze',
+      }).catch(() => {});
+    }, 800);
+    return;
+  }
+
+  // Bridge 功能 — 需要连接
+  if (!connected) {
+    console.log('[Hermes] Bridge 未连接');
+    return;
+  }
+
+  const pageInfo = {
+    url: tab?.url || info.pageUrl,
+    title: tab?.title || '',
+    selectionText: info.selectionText || null,
+    timestamp: Date.now(),
+  };
+
+  let action = 'ask';
+  if (info.menuItemId === 'hermes-send-page') action = 'analyze_page';
+  else if (info.menuItemId === 'hermes-send-selection') action = 'process_selection';
+
+  sendToBridge({
+    type: 'context_menu_action',
+    request_id: generateId(),
+    data: { ...pageInfo, action },
+  });
+});
+
+// ============================================================
+// 获取当前页面内容（供侧边栏调用）
+// ============================================================
+
+async function getPageContent(tabId) {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    const url = tab?.url || '';
+    if (isRestrictedPage(url)) {
+      return {
+        text: '',
+        title: tab?.title || '',
+        url,
+        restricted: true,
+        reason: 'protected_page',
+      };
+    }
+    let result;
+    try {
+      result = await chrome.tabs.sendMessage(tabId, {
+        type: 'read',
+        selector: null,
+      });
+    } catch (err) {
+      await ensureContentScriptInjected(tabId);
+      result = await chrome.tabs.sendMessage(tabId, {
+        type: 'read',
+        selector: null,
+      });
+    }
+    return result || { text: '', title: '', url: '' };
+  } catch (err) {
+    return {
+      text: '',
+      title: '',
+      url: '',
+      unavailable: true,
+      reason: 'content_script_unavailable',
+      error: err.message || String(err),
+    };
+  }
+}
+
+function isRestrictedPage(url = '') {
+  return /^(chrome|chrome-extension|edge|about|brave):\/\//i.test(url) ||
+    /^https:\/\/chrome\.google\.com\/webstore\//i.test(url);
+}
+
+async function ensureContentScriptInjected(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['content.js'],
+  });
+}
+
+async function debugActivePage() {
+  const tab = await ensureActiveTab();
+  const url = tab?.url || '';
+
+  if (isRestrictedPage(url)) {
+    return {
+      ok: false,
+      restricted: true,
+      url,
+      title: tab?.title || '',
+      reason: 'protected_page',
+    };
+  }
+
+  let ping = null;
+  let debug = null;
+  let injectionAttempted = false;
+
+  try {
+    ping = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
+  } catch (err) {
+    injectionAttempted = true;
+    await ensureContentScriptInjected(tab.id);
+    ping = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
+  }
+
+  try {
+    debug = await chrome.tabs.sendMessage(tab.id, { type: 'debug_page' });
+  } catch (err) {
+    debug = { ok: false, error: err.message || String(err) };
+  }
+
+  return {
+    ok: true,
+    restricted: false,
+    injectionAttempted,
+    url,
+    title: tab?.title || '',
+    ping,
+    debug,
+  };
+}
+
+// ============================================================
+// WebSocket Bridge 管理
 // ============================================================
 
 async function getBridgeUrl() {
@@ -27,22 +219,19 @@ async function getBridgeUrl() {
   return `ws://${bridgeHost || CONFIG.bridgeHost}:${CONFIG.bridgePort}/extension`;
 }
 
-async function connect() {
+async function bridgeConnect() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return;
   }
 
   const url = await getBridgeUrl();
-
   ws = new WebSocket(url);
 
   ws.onopen = () => {
-    console.log('[Hermes Bridge] ✅ Connected');
+    console.log('[Hermes] ✅ Bridge 已连接');
     connected = true;
     reconnectAttempts = 0;
-    updateBadge('ON');
-    clearTimeout(reconnectTimer);
-    notifyPopup({ type: 'connection_status', connected: true });
+    notifySidePanel({ type: 'bridge_status', connected: true });
   };
 
   ws.onmessage = async (event) => {
@@ -50,116 +239,61 @@ async function connect() {
       const message = JSON.parse(event.data);
       await handleBridgeMessage(message);
     } catch (err) {
-      console.warn('[Hermes Bridge] Invalid message:', err);
+      console.log('[Hermes] Bridge 消息解析失败:', err);
     }
   };
 
-  ws.onclose = (event) => {
-    console.log('[Hermes Bridge] ❌ Disconnected (code:', event.code, ')');
+  ws.onclose = () => {
+    console.log('[Hermes] ❌ Bridge 已断开');
     connected = false;
-    updateBadge('');
-    rejectAllPending('Bridge disconnected');
     ws = null;
-    notifyPopup({ type: 'connection_status', connected: false });
+    notifySidePanel({ type: 'bridge_status', connected: false });
     scheduleReconnect();
   };
 
   ws.onerror = () => {
-    // 静默 — 服务器未启动时 ERR_CONNECTION_REFUSED 会触发 onclose
+    // onclose 会在 error 后触发，这里忽略
   };
 }
 
-function disconnect() {
+function bridgeDisconnect() {
   if (ws) {
     ws.close();
     ws = null;
   }
   connected = false;
   reconnectAttempts = 0;
-  updateBadge('');
   clearTimeout(reconnectTimer);
-  notifyPopup({ type: 'connection_status', connected: false });
+  notifySidePanel({ type: 'bridge_status', connected: false });
 }
 
 function scheduleReconnect() {
   clearTimeout(reconnectTimer);
-  // 指数退避: 1s → 2s → 4s → 8s → 16s → 30s(max)
   const delay = Math.min(
     CONFIG.reconnectBaseDelay * Math.pow(2, reconnectAttempts),
     CONFIG.reconnectMaxDelay
   );
   reconnectAttempts++;
-  console.log(`[Hermes Bridge] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
-  reconnectTimer = setTimeout(() => {
-    connect();
-  }, delay);
+  reconnectTimer = setTimeout(() => { bridgeConnect(); }, delay);
 }
 
 // ============================================================
-// Service Worker 保活 — 使用 chrome.alarms（比 setInterval 可靠）
-// ============================================================
-
-function ensureKeepAlive() {
-  // 创建每20秒唤醒一次 SW 的 alarm
-  chrome.alarms.create('hermes-bridge-keepalive', {
-    periodInMinutes: CONFIG.keepAliveInterval / 60,  // 20 seconds
-  });
-}
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'hermes-bridge-keepalive') {
-    // 如果连接断开，尝试重连
-    if (!connected || !ws || ws.readyState !== WebSocket.OPEN) {
-      connect();
-    } else {
-      // 发送 ping 保活
-      try {
-        ws.send(JSON.stringify({ type: 'ping' }));
-      } catch (e) {
-        // ignore
-      }
-    }
-  }
-});
-
-// ============================================================
-// 消息路由
+// Bridge 消息处理（来自 Hermes Agent 的浏览器命令）
 // ============================================================
 
 async function handleBridgeMessage(message) {
   const { type, action, params, request_id } = message;
 
-  // 心跳响应
   if (type === 'pong') return;
-
-  // 心跳检测
   if (type === 'ping') {
     sendToBridge({ type: 'pong' });
     return;
   }
 
-  // 状态查询
-  if (type === 'get_status') {
-    sendToBridge({
-      type: 'status',
-      connected: true,
-      activeTabId: activeTabId || null,
-    });
-    return;
-  }
-
-  // 浏览器操作命令
   if (type === 'browser_action' || action) {
     const rid = request_id || generateId();
     try {
       const result = await executeBrowserAction(action || type, params || {});
-      // 通知 popup 有操作完成
-      notifyPopup({
-        type: 'action_completed',
-        action: action || type,
-        status: 'ok',
-        timestamp: Date.now(),
-      });
       sendToBridge({
         type: 'browser_action_response',
         request_id: rid,
@@ -177,201 +311,163 @@ async function handleBridgeMessage(message) {
     return;
   }
 
-  console.warn('[Hermes Bridge] Unknown message type:', type);
+  console.log('[Hermes] 未知消息类型:', type);
+}
+
+function sendToBridge(data) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data));
+  }
+}
+
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
 // ============================================================
-// 浏览器操作执行
+// 浏览器操作（供 Hermes Agent 使用）
 // ============================================================
 
 async function executeBrowserAction(action, params) {
   switch (action) {
-    case 'navigate':
-      return await actionNavigate(params);
-    case 'read':
-      return await actionRead(params);
-    case 'click':
-      return await actionClick(params);
-    case 'fill':
-      return await actionFill(params);
-    case 'screenshot':
-      return await actionScreenshot(params);
-    case 'extract':
-      return await actionExtract(params);
-    case 'scroll':
-      return await actionScroll(params);
-    case 'get_tabs':
-      return await actionGetTabs(params);
-    case 'activate_tab':
-      return await actionActivateTab(params);
-    case 'wait':
-      return await actionWait(params);
-    case 'get_active_tab':
-      return await getActiveTab();
-    case 'inject':
-      return await actionInject(params);
-    case 'reload_and_inject':
-      return await actionReloadAndInject(params);
-    default:
-      throw new Error(`Unknown action: ${action}`);
+    case 'navigate': return await actionNavigate(params);
+    case 'read': return await actionRead(params);
+    case 'click': return await actionClick(params);
+    case 'fill': return await actionFill(params);
+    case 'select': return await actionSelect(params);
+    case 'screenshot': return await actionScreenshot(params);
+    case 'extract': return await actionExtract(params);
+    case 'scroll': return await actionScroll(params);
+    case 'get_tabs': return await actionGetTabs();
+    case 'activate_tab': return await actionActivateTab(params);
+    case 'wait': return await actionWait(params);
+    case 'get_active_tab': return await getActiveTab();
+    case 'inject': return await actionInject(params);
+    case 'reload_and_inject': return await actionReloadAndInject(params);
+    case 'scan_forms': return await actionScanForms();
+    case 'read_structured': return await actionReadStructured();
+    default: throw new Error(`Unknown action: ${action}`);
   }
 }
 
-// --- 导航 ---
+async function getActiveTab() {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tabs.length > 0 ? tabs[0] : null;
+}
+
+async function ensureActiveTab() {
+  const tab = await getActiveTab();
+  if (!tab) throw new Error('No active tab found');
+  return tab;
+}
 
 async function actionNavigate(params) {
   const url = params.url;
   if (!url) throw new Error('URL required');
-
   let tab = await getActiveTab();
   if (!tab) {
     tab = await chrome.tabs.create({ url });
   } else {
     await chrome.tabs.update(tab.id, { url, active: true });
   }
-
-  // 等待页面加载完成
   await waitForTabLoad(tab.id);
-
   const updated = await chrome.tabs.get(tab.id);
-  activeTabId = updated.id;
-
-  return {
-    url: updated.url,
-    title: updated.title,
-    status: updated.status,
-  };
+  return { url: updated.url, title: updated.title, status: updated.status };
 }
-
-// --- 读取页面内容 ---
 
 async function actionRead(params) {
   const tab = await ensureActiveTab();
-  const selector = params.selector || null;
-
-  const result = await chrome.tabs.sendMessage(tab.id, {
-    type: 'read',
-    selector: selector,
-  });
-
+  const result = await chrome.tabs.sendMessage(tab.id, { type: 'read', selector: params.selector || null });
   return result;
 }
-
-// --- 点击元素 ---
 
 async function actionClick(params) {
   const tab = await ensureActiveTab();
-  const selector = params.selector;
-
-  if (!selector) throw new Error('Selector required for click');
-
-  const result = await chrome.tabs.sendMessage(tab.id, {
-    type: 'click',
-    selector: selector,
-    position: params.position || null,
-  });
-
-  return result;
+  if (!params.selector) throw new Error('Selector required');
+  return await chrome.tabs.sendMessage(tab.id, { type: 'click', selector: params.selector });
 }
-
-// --- 填写表单 ---
 
 async function actionFill(params) {
   const tab = await ensureActiveTab();
-  const { selector, value } = params;
-  if (!selector) throw new Error('Selector required for fill');
-
-  const result = await chrome.tabs.sendMessage(tab.id, {
-    type: 'fill',
-    selector: selector,
-    value: value || '',
-    humanLike: params.humanLike !== false,
-  });
-
-  return result;
+  if (!params.selector) throw new Error('Selector required');
+  return await chrome.tabs.sendMessage(tab.id, { type: 'fill', selector: params.selector, value: params.value || '', humanLike: params.humanLike !== false });
 }
 
-// --- 截图 ---
+async function actionSelect(params) {
+  const tab = await ensureActiveTab();
+  if (!params.selector) throw new Error('Selector required');
+  return await chrome.tabs.sendMessage(tab.id, {
+    type: 'select',
+    selector: params.selector,
+    value: params.value ?? '',
+  });
+}
 
 async function actionScreenshot(params) {
   const format = params.format || 'png';
-  const dataUrl = await chrome.tabs.captureVisibleTab(null, { format });
 
-  return { image: dataUrl, format };
+  // 用 lastFocusedWindow 找到网页所在窗口（排除侧边栏干扰）
+  const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const tab = tabs[0];
+  if (!tab) throw new Error('无法定位当前窗口，请确保有网页标签页处于激活状态');
+
+  // Chrome 系统保护页面（webstore / chrome:// 等）无法截图，属浏览器安全限制
+  if (isRestrictedPage(tab.url || '')) {
+    throw new Error(
+      'Chrome 受保护页面（如 Web Store / chrome:// 页面）不允许扩展截图。\n' +
+      '请改用系统截图工具：Mac 按 ⌘⇧4，Windows 按 Win+Shift+S。'
+    );
+  }
+
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format });
+    return { image: dataUrl, format };
+  } catch (err) {
+    // activeTab 未激活时的 fallback 提示
+    if (err.message?.includes('activeTab')) {
+      throw new Error('请先点击页面内任意位置（激活标签页），再点截图按钮。');
+    }
+    throw err;
+  }
 }
-
-// --- 提取结构化数据 ---
 
 async function actionExtract(params) {
   const tab = await ensureActiveTab();
-  const selectors = params.selectors || {};
-
-  const result = await chrome.tabs.sendMessage(tab.id, {
-    type: 'extract',
-    selectors: selectors,
-  });
-
-  return result;
+  return await chrome.tabs.sendMessage(tab.id, { type: 'extract', selectors: params.selectors || {} });
 }
-
-// --- 滚动 ---
 
 async function actionScroll(params) {
   const tab = await ensureActiveTab();
-
-  const result = await chrome.tabs.sendMessage(tab.id, {
-    type: 'scroll',
-    direction: params.direction || 'down',
-    amount: params.amount || null,
-  });
-
-  return result;
+  return await chrome.tabs.sendMessage(tab.id, { type: 'scroll', direction: params.direction || 'down', amount: params.amount || null });
 }
-
-// --- 标签页管理 ---
 
 async function actionGetTabs() {
   const tabs = await chrome.tabs.query({});
-  return {
-    tabs: tabs.map(t => ({
-      id: t.id,
-      title: t.title,
-      url: t.url,
-      active: t.active,
-    })),
-  };
+  return { tabs: tabs.map(t => ({ id: t.id, title: t.title, url: t.url, active: t.active })) };
 }
 
 async function actionActivateTab(params) {
-  const tabId = params.tabId;
-  await chrome.tabs.update(tabId, { active: true });
-  await waitForTabLoad(tabId);
-  const tab = await chrome.tabs.get(tabId);
-  activeTabId = tab.id;
+  await chrome.tabs.update(params.tabId, { active: true });
+  await waitForTabLoad(params.tabId);
+  const tab = await chrome.tabs.get(params.tabId);
   return { id: tab.id, url: tab.url, title: tab.title };
 }
 
-// --- 等待 ---
-
 async function actionWait(params) {
   const ms = params.ms || 1000;
-  await sleep(ms);
+  await new Promise(r => setTimeout(r, ms));
   return { waited: ms };
 }
-
-// --- 注入检查 ---
 
 async function actionInject(params) {
   const tab = await ensureActiveTab();
   try {
-    const resp = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
-    return { injected: true, tabId: tab.id, url: tab.url };
+    await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
+    return { injected: true, tabId: tab.id };
   } catch (err) {
-    return { injected: false, reason: 'content script not responding', tabId: tab.id };
+    return { injected: false, reason: 'content script not responding' };
   }
 }
-
-// --- 刷新页面 ---
 
 async function actionReloadAndInject(params) {
   const tab = await ensureActiveTab();
@@ -380,110 +476,27 @@ async function actionReloadAndInject(params) {
   return { reloaded: true, tabId: tab.id };
 }
 
-// ============================================================
-// 上下文菜单（类似 Claude for Chrome）
-// ============================================================
-
-function ensureContextMenus() {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: 'hermes-send-page',
-      title: '让 Hermes 分析当前页面',
-      contexts: ['page'],
-    });
-    chrome.contextMenus.create({
-      id: 'hermes-send-selection',
-      title: '让 Hermes 处理选中文字',
-      contexts: ['selection'],
-    });
-    chrome.contextMenus.create({
-      id: 'hermes-ask-page',
-      title: '向 Hermes 提问当前页面',
-      contexts: ['link', 'image', 'video', 'audio'],
-    });
-    chrome.contextMenus.create({
-      id: 'hermes-summarize',
-      title: '让 Hermes 总结本页',
-      contexts: ['page'],
-    });
-  });
+async function actionScanForms() {
+  const tab = await ensureActiveTab();
+  return await chrome.tabs.sendMessage(tab.id, { type: 'scan_forms' });
 }
 
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (!connected) {
-    notifyPopup({ type: 'context_menu_result', success: false, error: '未连接到 Bridge Server' });
-    return;
+async function actionReadStructured() {
+  const tab = await ensureActiveTab();
+  try {
+    return await chrome.tabs.sendMessage(tab.id, { type: 'read_structured' });
+  } catch (err) {
+    // 内容脚本未就绪时降级为普通读取
+    return await chrome.tabs.sendMessage(tab.id, { type: 'read', selector: null });
   }
-
-  let action = 'ask';
-  if (info.menuItemId === 'hermes-send-page') {
-    action = 'analyze_page';
-  } else if (info.menuItemId === 'hermes-send-selection') {
-    action = 'process_selection';
-  } else if (info.menuItemId === 'hermes-summarize') {
-    action = 'summarize';
-  }
-
-  // 收集页面信息
-  const pageInfo = {
-    action,
-    url: tab?.url || info.pageUrl,
-    title: tab?.title || '',
-    selectionText: info.selectionText || null,
-    tabId: tab?.id || null,
-    timestamp: Date.now(),
-  };
-
-  // 通过 WebSocket 发送给 Bridge Server（递送给 Hermes Agent）
-  sendToBridge({
-    type: 'context_menu_action',
-    request_id: generateId(),
-    data: pageInfo,
-  });
-
-  notifyPopup({
-    type: 'context_menu_result',
-    success: true,
-    action,
-    message: `已发送给 Hermes: ${action === 'summarize' ? '总结此页' : action === 'analyze_page' ? '分析页面' : '处理选中文字'}`,
-  });
-});
-
-// ============================================================
-// Side Panel 支持
-// ============================================================
-
-// 不设置 openPanelOnActionClick（保留 popup 为主界面）
-// 用户可通过扩展图标右键菜单 → "Open side panel" 打开
-
-// ============================================================
-// 辅助函数
-// ============================================================
-
-async function getActiveTab() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tabs.length > 0) {
-    activeTabId = tabs[0].id;
-    return tabs[0];
-  }
-  return null;
-}
-
-async function ensureActiveTab() {
-  let tab = await getActiveTab();
-  if (!tab) {
-    throw new Error('No active tab found. Open a page first.');
-  }
-  return tab;
 }
 
 function waitForTabLoad(tabId, timeout = 15000) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const timer = setTimeout(() => {
       chrome.tabs.onUpdated.removeListener(listener);
       resolve({ timeout: true });
     }, timeout);
-
     const listener = (id, changeInfo) => {
       if (id === tabId && changeInfo.status === 'complete') {
         clearTimeout(timer);
@@ -491,125 +504,118 @@ function waitForTabLoad(tabId, timeout = 15000) {
         setTimeout(() => resolve({ loaded: true }), 500);
       }
     };
-
     chrome.tabs.onUpdated.addListener(listener);
   });
 }
 
-function sendToBridge(data) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(data));
-  } else {
-    console.warn('[Hermes Bridge] Cannot send: not connected');
-  }
+// ============================================================
+// Service Worker 保活
+// ============================================================
+
+function ensureKeepAlive() {
+  if (!chrome.alarms) return;
+  chrome.alarms.create('hermes-keepalive', { periodInMinutes: CONFIG.keepAliveInterval / 60 });
 }
 
-function updateBadge(text) {
-  chrome.action.setBadgeText({ text });
-  chrome.action.setBadgeBackgroundColor({ color: text === 'ON' ? '#22c55e' : '#6b7280' });
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function generateId() {
-  return 'rq_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
-}
-
-function rejectAllPending(reason) {
-  for (const [id, req] of pendingRequests) {
-    clearTimeout(req.timer);
-    req.reject(new Error(reason));
-  }
-  pendingRequests.clear();
-}
-
-// 通知所有打开的 popup/sidepanel
-function notifyPopup(data) {
-  chrome.runtime.sendMessage(data).catch(() => {
-    // popup 未打开时忽略错误
-  });
-}
-
-// 主动获取当前标签页信息并推送给 bridge server
-async function notifyActiveTab() {
-  try {
-    const tab = await getActiveTab();
-    if (tab && connected) {
-      sendToBridge({
-        type: 'tab_changed',
-        data: {
-          url: tab.url,
-          title: tab.title,
-          tabId: tab.id,
-        },
-      });
+if (chrome.alarms) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'hermes-keepalive') {
+      if (!connected && ws === null) {
+        chrome.storage.local.get(['autoConnect'], ({ autoConnect }) => {
+          if (autoConnect) bridgeConnect();
+        });
+      }
     }
-  } catch (e) {
-    // ignore
-  }
+  });
 }
 
 // ============================================================
-// 扩展生命周期事件
+// 消息路由（接收 Side Panel 请求）
 // ============================================================
 
-// 安装/更新时注册菜单和保活
-chrome.runtime.onInstalled.addListener(() => {
-  ensureKeepAlive();
-  ensureContextMenus();
-});
-
-// 自动初始化
-(function autoInit() {
-  // 清除旧端口配置
-  chrome.storage.local.get(['bridgePort'], (items) => {
-    if (items.bridgePort && items.bridgePort !== '8643') {
-      chrome.storage.local.remove('bridgePort');
-    }
-  });
-
-  // 确保保活机制
-  ensureKeepAlive();
-  ensureContextMenus();
-
-  // 延迟连接（给 SW 足够时间初始化）
-  setTimeout(() => connect(), 500);
-})();
-
-// 监听来自 popup/sidepanel 的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  (async () => {
+    try {
+      const result = await handleMessage(message, sender);
+      sendResponse(result || {});
+    } catch (err) {
+      sendResponse({ error: err.message });
+    }
+  })();
+  return true; // 保持 sendResponse 可用
+});
+
+async function handleMessage(message, sender) {
   switch (message.type) {
-    case 'connect':
-      connect();
-      sendResponse({ connected: true });
-      break;
-    case 'disconnect':
-      disconnect();
-      sendResponse({ connected: false });
-      break;
-    case 'get_connection_status':
-      sendResponse({ connected, wsReady: ws?.readyState === WebSocket.OPEN });
-      break;
-    case 'get_active_tab_info':
-      getActiveTab().then(tab => {
-        sendResponse(tab ? { url: tab.url, title: tab.title, id: tab.id } : null);
-      }).catch(() => sendResponse(null));
-      return true; // 异步响应
-  }
-  return true;
-});
 
-// 监听标签页切换，通知 bridge server
-chrome.tabs.onActivated.addListener(async (activeInfo) => {
-  activeTabId = activeInfo.tabId;
-  notifyActiveTab();
-});
+    // === 页面内容获取 ===
+    case 'get_page_content': {
+      // 获取当前活动标签页的内容
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+      if (!tabId) return { text: '', title: '', url: '' };
+      return await getPageContent(tabId);
+    }
 
-// 监听标签页更新
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (tabId === activeTabId && changeInfo.status === 'complete') {
-    notifyActiveTab();
+    // === 打开侧边栏 ===
+    case 'open_side_panel': {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs[0]) {
+        await chrome.sidePanel.open({ windowId: tabs[0].windowId });
+      }
+      return { success: true };
+    }
+
+    // === Bridge 连接管理 ===
+    case 'check_bridge': {
+      return { connected };
+    }
+
+    case 'bridge_connect': {
+      await bridgeConnect();
+      await new Promise(r => setTimeout(r, 1500));
+      return { connected };
+    }
+
+    case 'bridge_disconnect': {
+      bridgeDisconnect();
+      return { connected: false };
+    }
+
+    case 'get_connection_status': {
+      return { connected };
+    }
+
+    // 侧边栏直接执行浏览器操作（无需 Bridge）
+    case 'execute_action': {
+      return await executeBrowserAction(message.action, message.params || {});
+    }
+
+    case 'debug_page_access': {
+      return await debugActivePage();
+    }
+
+    default:
+      return { error: `Unknown message type: ${message.type}` };
   }
-});
+}
+
+// ============================================================
+// 通知侧边栏
+// ============================================================
+
+function notifySidePanel(data) {
+  try {
+    chrome.runtime.sendMessage(data).catch(() => {});
+  } catch (e) {
+    // 侧边栏未打开时忽略
+  }
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+
+ensureKeepAlive();
+ensureContextMenus();
+console.log('[Hermes AI Assistant] v3.0 loaded');
