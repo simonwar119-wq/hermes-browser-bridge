@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Hermes AI Assistant",
-  "version": "3.1.1",
-  "description": "AI chat & browser controller. Chat with DeepSeek AI about any page, and control your browser — navigate, screenshot, click, fill forms.",
+  "version": "3.1.2",
+  "description": "AI chat and browser control in one side panel. Summarize pages, navigate, screenshot, click, and fill forms.",
   "permissions": [
     "activeTab",
     "tabs",
