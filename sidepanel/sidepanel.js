@@ -876,7 +876,9 @@ async function sendMessage(userInput) {
           contentArr.push({ type: 'image_url', image_url: { url: dataUrl, detail: 'high' } });
         }
       }
-      contentArr.push({ type: 'text', text: typeof userContent === 'string' ? userContent : text });
+      const userMsg = typeof userContent === 'string' ? userContent : text;
+      const groundedMsg = `[截图说明：以下图片是用户手动截图/上传，请只根据图片内容回答]\n\n${userMsg}`;
+      contentArr.push({ type: 'text', text: groundedMsg });
       userContent = contentArr;
       clearPastedImages();
 
@@ -939,18 +941,22 @@ function shouldAutoScreenshot(text) {
 }
 
 function buildVisionContent(dataUrl, text, format) {
+  // 在用户消息前加锚定指令，防止 AI 被历史上下文误导
+  const groundedText =
+    `[截图说明：以下图片是用户当前浏览器页面的截图，请只根据图片内容回答，不要联想其他话题或之前聊过的内容]\n\n${text}`;
+
   if (format === 'anthropic') {
     // Claude 原生格式
     const base64 = dataUrl.split(',')[1] || dataUrl;
     return [
       { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64 } },
-      { type: 'text', text },
+      { type: 'text', text: groundedText },
     ];
   }
   // OpenAI 兼容格式（DeepSeek/OpenAI/Gemini/Grok/Kimi）
   return [
     { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
-    { type: 'text', text },
+    { type: 'text', text: groundedText },
   ];
 }
 
