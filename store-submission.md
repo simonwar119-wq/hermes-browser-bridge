@@ -58,6 +58,18 @@ tabs 权限用于：(1) 在侧边栏显示当前页面的标题和 URL；(2) Bri
 storage 权限用于在用户本地保存：用户自行填写的 API Key、选定的 AI 模型、对话历史（最多20条）、表单填写资料、Bridge 服务器地址配置。所有数据仅存储在用户本地浏览器中，不上传到开发者自有服务器。
 ```
 
+### alarms
+
+```
+alarms 权限用于在启用可选 Bridge 模式时定期唤醒扩展后台服务，以便检查本地 Bridge 连接状态，并在用户已开启自动连接时执行重连。该权限不用于任何广告、跟踪、遥测或面向开发者服务器的后台数据传输。
+```
+
+### scripting
+
+```
+scripting 权限用于在普通网页中按需注入扩展自己的内容脚本，以便在用户主动触发操作时读取页面文本、识别表单、点击元素、填写表单和滚动页面。该注入仅作用于用户当前网页，不会在后台批量运行。
+```
+
 ### host_permissions (<all_urls>)
 
 ```
@@ -95,7 +107,7 @@ https://<your-github-username>.github.io/hermes-browser-bridge/privacy-policy.ht
 ## 简短描述（132 字符以内）
 
 ```
-AI chat & browser controller. Chat with DeepSeek AI about any page. Navigate, screenshot, click, and fill forms directly from the panel.
+AI side panel: chat any page, auto-fill forms, 6 models (DeepSeek/GPT-5/Claude/Gemini/Grok/Kimi). Paste screenshots for vision AI.
 ```
 
 ## 详细描述
@@ -103,33 +115,42 @@ AI chat & browser controller. Chat with DeepSeek AI about any page. Navigate, sc
 ```
 Hermes AI Assistant — AI Chat & Browser Controller
 
-Open the side panel to chat with DeepSeek AI about any webpage, and control your browser directly without needing any external server.
+Open the Chrome side panel to chat with your chosen AI model about any webpage — and control your browser directly from the panel.
 
-🤖 AI Chat (requires DeepSeek API Key)
-• Chat about the current page — summarize, analyze, translate, explain
+🔀 6 AI Providers — One Click to Switch
+Switch between DeepSeek V4, GPT-5.5/5.4, Claude Opus 4.8, Gemini 3.x, Grok 4, and Kimi K2 from the header badge. Each provider uses your own API key — no subscription, no proxy, no backend.
+
+🤖 AI Chat About the Current Page
+The extension reads structured page content (headings, tables → Markdown, form fields) and includes it in the AI's context. Ask questions about any page without copy-pasting.
 • Streaming responses with Markdown rendering
 • Conversation history preserved across sessions
 • Quick-action buttons: Summary, Key Points, Translate, Analyze, Explain
 
-🖥️ Browser Control (no API Key needed)
-Type commands directly in the chat or use toolbar buttons:
-• 📷 Screenshot — capture the current page and view inline
+📋 Smart Form Auto-Fill (AI-Powered)
+Store your profile once — developer info, app descriptions, compliance answers, custom fields. On any web form, click one button to scan all visible fields and have the AI auto-fill them using your stored data. Works on any website.
+
+📷 Screenshot & Vision
+• Click 📷 to capture the current tab — shown inline in chat
+• Paste any system screenshot (⌘V / Ctrl+V) or upload an image — sent to the AI as a vision message
+• Ideal for pages extensions can't read (Chrome Web Store, PDFs)
+• Supports up to 4 images per message
+
+🖥️ Browser Control
+Type commands or use toolbar buttons:
 • 🌐 Navigate — go to any URL in the current tab
-• 🖱️ Click — click any page element by CSS selector or text
+• 🖱️ Click — click any page element by CSS selector
 • ✏️ Fill — type into form fields with human-like simulation
-• ↕️ Scroll — scroll the page up or down
-• 📄 Read — extract the page's text content
 
 🔌 Bridge Mode (optional, advanced)
-Connect to a local Hermes Agent server via WebSocket for external automation scripts.
+Connect to a local Hermes Agent via WebSocket for external browser automation scripts.
 
-🔒 Privacy
-• AI requests go only to the AI provider selected by the user (HTTPS, requires the user's API Key)
-• Browser control runs entirely locally — no network requests
+🔒 Privacy First
+• API keys stored locally in Chrome — never sent anywhere except your chosen AI provider
 • No analytics, no tracking, no data collection
-• API Key stored locally in your browser only
+• Page content included in AI requests only when you initiate a query
+• Images not stored in conversation history
 
-Setup: Click the extension icon → Open the AI side panel → Enter an API Key for the provider you want to use in Settings. Browser control works locally when the user explicitly triggers it.
+Setup: Click the extension icon → Open AI Chat → Enter your API Key in Settings → start chatting.
 ```
 
 ---
