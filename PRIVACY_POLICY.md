@@ -94,7 +94,6 @@ The extension requests browser permissions only to support user-invoked features
 - `storage`: save user settings locally
 - `sidePanel`: display the extension interface in the browser side panel
 - `contextMenus`: provide right-click shortcuts
-- `alarms`: keep the optional Bridge reconnection logic alive
 - `<all_urls>`: read or interact with webpages when the user requests it
 
 ## What We Do Not Do

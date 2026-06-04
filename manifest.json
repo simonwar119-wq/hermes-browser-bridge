@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hermes AI Assistant",
-  "version": "3.1.2",
+  "version": "3.1.3",
   "description": "AI chat and browser control in one side panel. Summarize pages, navigate, screenshot, click, and fill forms.",
   "permissions": [
     "activeTab",
@@ -9,8 +9,7 @@
     "scripting",
     "storage",
     "sidePanel",
-    "contextMenus",
-    "alarms"
+    "contextMenus"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -25,13 +24,6 @@
   "background": {
     "service_worker": "service-worker.js"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ],
   "side_panel": {
     "default_path": "sidepanel/sidepanel.html"
   },

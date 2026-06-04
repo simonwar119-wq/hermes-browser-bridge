@@ -1,4 +1,4 @@
-// Hermes AI Assistant — Service Worker v3.0
+// Hermes AI Assistant — Service Worker v3.1.3
 // 功能：点击图标打开侧边栏、上下文菜单、页面内容获取、Bridge WebSocket 连接
 
 // ============================================================
@@ -11,7 +11,6 @@ const CONFIG = {
   bridgePort: 8643,
   reconnectBaseDelay: 1000,
   reconnectMaxDelay: 30000,
-  keepAliveInterval: 20, // 秒
 };
 
 // ============================================================
@@ -129,19 +128,11 @@ async function getPageContent(tabId) {
         reason: 'protected_page',
       };
     }
-    let result;
-    try {
-      result = await chrome.tabs.sendMessage(tabId, {
-        type: 'read',
-        selector: null,
-      });
-    } catch (err) {
-      await ensureContentScriptInjected(tabId);
-      result = await chrome.tabs.sendMessage(tabId, {
-        type: 'read',
-        selector: null,
-      });
-    }
+    await ensureContentScriptReady(tabId);
+    const result = await chrome.tabs.sendMessage(tabId, {
+      type: 'read',
+      selector: null,
+    });
     return result || { text: '', title: '', url: '' };
   } catch (err) {
     return {
@@ -167,6 +158,37 @@ async function ensureContentScriptInjected(tabId) {
   });
 }
 
+async function ensureContentScriptReady(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  const url = tab?.url || '';
+  if (isRestrictedPage(url)) {
+    throw new Error('当前页面受 Chrome 保护，无法直接读取或操作 DOM');
+  }
+
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'ping' });
+    return { tab, injected: false };
+  } catch (err) {
+    await ensureContentScriptInjected(tabId);
+    await chrome.tabs.sendMessage(tabId, { type: 'ping' });
+    return { tab, injected: true };
+  }
+}
+
+async function ensureActionableTab() {
+  const tab = await ensureActiveTab();
+  await ensureContentScriptReady(tab.id);
+  return tab;
+}
+
+async function ensureReloadedTabReady(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['content.js'],
+  });
+  await chrome.tabs.sendMessage(tabId, { type: 'ping' });
+}
+
 async function debugActivePage() {
   const tab = await ensureActiveTab();
   const url = tab?.url || '';
@@ -181,17 +203,9 @@ async function debugActivePage() {
     };
   }
 
-  let ping = null;
   let debug = null;
-  let injectionAttempted = false;
-
-  try {
-    ping = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
-  } catch (err) {
-    injectionAttempted = true;
-    await ensureContentScriptInjected(tab.id);
-    ping = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
-  }
+  const { injected } = await ensureContentScriptReady(tab.id);
+  const ping = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
 
   try {
     debug = await chrome.tabs.sendMessage(tab.id, { type: 'debug_page' });
@@ -202,7 +216,7 @@ async function debugActivePage() {
   return {
     ok: true,
     restricted: false,
-    injectionAttempted,
+    injectionAttempted: injected,
     url,
     title: tab?.title || '',
     ping,
@@ -376,25 +390,25 @@ async function actionNavigate(params) {
 }
 
 async function actionRead(params) {
-  const tab = await ensureActiveTab();
+  const tab = await ensureActionableTab();
   const result = await chrome.tabs.sendMessage(tab.id, { type: 'read', selector: params.selector || null });
   return result;
 }
 
 async function actionClick(params) {
-  const tab = await ensureActiveTab();
+  const tab = await ensureActionableTab();
   if (!params.selector) throw new Error('Selector required');
   return await chrome.tabs.sendMessage(tab.id, { type: 'click', selector: params.selector });
 }
 
 async function actionFill(params) {
-  const tab = await ensureActiveTab();
+  const tab = await ensureActionableTab();
   if (!params.selector) throw new Error('Selector required');
   return await chrome.tabs.sendMessage(tab.id, { type: 'fill', selector: params.selector, value: params.value || '', humanLike: params.humanLike !== false });
 }
 
 async function actionSelect(params) {
-  const tab = await ensureActiveTab();
+  const tab = await ensureActionableTab();
   if (!params.selector) throw new Error('Selector required');
   return await chrome.tabs.sendMessage(tab.id, {
     type: 'select',
@@ -432,12 +446,12 @@ async function actionScreenshot(params) {
 }
 
 async function actionExtract(params) {
-  const tab = await ensureActiveTab();
+  const tab = await ensureActionableTab();
   return await chrome.tabs.sendMessage(tab.id, { type: 'extract', selectors: params.selectors || {} });
 }
 
 async function actionScroll(params) {
-  const tab = await ensureActiveTab();
+  const tab = await ensureActionableTab();
   return await chrome.tabs.sendMessage(tab.id, { type: 'scroll', direction: params.direction || 'down', amount: params.amount || null });
 }
 
@@ -461,28 +475,25 @@ async function actionWait(params) {
 
 async function actionInject(params) {
   const tab = await ensureActiveTab();
-  try {
-    await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
-    return { injected: true, tabId: tab.id };
-  } catch (err) {
-    return { injected: false, reason: 'content script not responding' };
-  }
+  const { injected } = await ensureContentScriptReady(tab.id);
+  return { injected: true, injectedNow: injected, tabId: tab.id };
 }
 
 async function actionReloadAndInject(params) {
   const tab = await ensureActiveTab();
   await chrome.tabs.reload(tab.id);
   await waitForTabLoad(tab.id);
-  return { reloaded: true, tabId: tab.id };
+  await ensureReloadedTabReady(tab.id);
+  return { reloaded: true, injected: true, tabId: tab.id };
 }
 
 async function actionScanForms() {
-  const tab = await ensureActiveTab();
+  const tab = await ensureActionableTab();
   return await chrome.tabs.sendMessage(tab.id, { type: 'scan_forms' });
 }
 
 async function actionReadStructured() {
-  const tab = await ensureActiveTab();
+  const tab = await ensureActionableTab();
   try {
     return await chrome.tabs.sendMessage(tab.id, { type: 'read_structured' });
   } catch (err) {
@@ -505,27 +516,6 @@ function waitForTabLoad(tabId, timeout = 15000) {
       }
     };
     chrome.tabs.onUpdated.addListener(listener);
-  });
-}
-
-// ============================================================
-// Service Worker 保活
-// ============================================================
-
-function ensureKeepAlive() {
-  if (!chrome.alarms) return;
-  chrome.alarms.create('hermes-keepalive', { periodInMinutes: CONFIG.keepAliveInterval / 60 });
-}
-
-if (chrome.alarms) {
-  chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === 'hermes-keepalive') {
-      if (!connected && ws === null) {
-        chrome.storage.local.get(['autoConnect'], ({ autoConnect }) => {
-          if (autoConnect) bridgeConnect();
-        });
-      }
-    }
   });
 }
 
@@ -616,6 +606,5 @@ function notifySidePanel(data) {
 // 初始化
 // ============================================================
 
-ensureKeepAlive();
 ensureContextMenus();
-console.log('[Hermes AI Assistant] v3.0 loaded');
+console.log('[Hermes AI Assistant] v3.1.3 loaded');

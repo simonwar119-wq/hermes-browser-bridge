@@ -1,278 +1,285 @@
 # Hermes AI Assistant
 
-> Chrome side-panel extension. Multi-model AI chat with built-in browser control: navigate, screenshot, click, fill forms, and smart auto-fill using stored profile data.
+AI chat and browser control in one Chrome side panel.
 
----
+Hermes AI Assistant is a Manifest V3 Chrome extension that lets users bring their own API key, talk to mainstream LLMs, read the current page, and perform browser actions such as screenshot, navigate, click, scroll, and form filling.
 
-## What It Does (Product Overview)
+It is designed for people who want something closer to an "AI browser operator" without depending on a developer-owned backend.
 
-Hermes AI Assistant opens as a side panel on the right side of any Chrome window. It combines two capabilities:
+## Why This Project Exists
 
-1. **AI Chat** — Chat with top AI models about the current page. The extension reads the page's structured content (headings, tables, forms) and sends it to the AI, which can then summarize, analyze, translate, or answer questions based on real page data.
+Most browser AI tools do one of two things:
 
-2. **Browser Control** — The AI and the user can directly control the browser from the panel: navigate to URLs, take screenshots, click elements by selector, fill in form fields, and auto-fill entire forms using stored profile data.
+- They only chat about the page, but cannot actually operate it.
+- They automate the browser, but hide the model, the data path, or the permissions behind a hosted service.
 
-### Who It's For
+Hermes takes a different approach:
 
-- **Developers & product managers** who fill out app store submissions, compliance forms, or internal dashboards repeatedly
-- **Power users** who want AI assistance while browsing — page summarization, table analysis, Q&A — without switching windows
-- **Hermes Agent users** who want to connect their local automation agent to the browser via WebSocket
+- Bring your own API key
+- Use mainstream models directly from the browser
+- Keep settings and profile data local
+- Let the side panel both understand and operate the page
+- Keep optional agent integration local-only through a Bridge service
 
----
+## What You Can Do
 
-## Key Features
+- Chat with the current page using DeepSeek, OpenAI, Claude, Gemini, Grok, or Kimi
+- Read structured page content instead of only raw text
+- Take screenshots from the side panel
+- Navigate, click, scroll, and fill fields from chat commands
+- Paste screenshots or upload files as context
+- Auto-fill simple forms using stored profile data
+- Connect a local Hermes Agent through an optional Bridge mode
 
-### 1. Multi-Provider AI Chat
+## Product Screens
 
-Supports 6 AI providers with a single click from the header dropdown:
+![Hermes side panel](./screenshots/screenshot-1-popup.png)
 
-| Provider | Models | API Format |
-|----------|--------|------------|
-| 🟣 DeepSeek | deepseek-v4-pro, deepseek-v4-flash, deepseek-chat, deepseek-reasoner | OpenAI-compatible |
-| 🟢 OpenAI | gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.4-nano | OpenAI |
-| 🔵 Claude (Anthropic) | claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5-20251001 | Anthropic native |
-| 🔷 Gemini (Google) | gemini-3.1-pro-preview, gemini-3.5-flash, gemini-2.5-pro, gemini-2.5-flash | OpenAI-compatible |
-| ⚡ Grok (xAI) | grok-4, grok-4.3, grok-3, grok-3-mini | OpenAI-compatible |
-| 🌙 Kimi (Moonshot) | kimi-k2.6, kimi-k2.5, moonshot-v1-128k, moonshot-v1-32k, moonshot-v1-8k | OpenAI-compatible |
+![Vision and testing flow](./screenshots/screenshot-2-test.png)
 
-- **One-click model switching**: Click the model badge in the header → dropdown shows all providers and models
-- **Per-provider API Keys**: Each provider has its own API key input in Settings
-- **Unset key shown in orange** as a visual reminder
-- **Streaming responses** with Markdown rendering (code blocks, tables, headings, lists)
+## Supported Providers
 
-### 2. Structured Page Reading
+| Provider | Current models in the extension | API style |
+| --- | --- | --- |
+| DeepSeek | `deepseek-v4-pro`, `deepseek-v4-flash`, `deepseek-chat`, `deepseek-reasoner` | OpenAI-compatible |
+| OpenAI | `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano` | OpenAI |
+| Claude | `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` | Anthropic |
+| Gemini | `gemini-3.1-pro-preview`, `gemini-3.5-flash`, `gemini-2.5-pro`, `gemini-2.5-flash` | OpenAI-compatible |
+| Grok | `grok-4`, `grok-4.3`, `grok-3`, `grok-3-mini` | OpenAI-compatible |
+| Kimi | `kimi-k2.5`, `kimi-k2-thinking`, `kimi-k2-thinking-turbo`, `kimi-k2-turbo-preview`, `kimi-k2-0905-preview` | OpenAI-compatible |
 
-The extension reads the current page and gives the AI structured content instead of raw text:
+## Core Capabilities
 
-- `<h1>–<h4>` headings preserved as Markdown hierarchy
-- `<table>` elements converted to Markdown tables (row/column structure intact)
-- Form fields listed with labels and types
-- Up to 8 000 characters sent to the AI system prompt
+### 1. Multi-model side panel chat
 
-This means the AI can accurately answer questions about tables (Wikipedia data, product specs, pricing comparisons) and describe form structures without losing relationships between cells.
+The extension lives in Chrome's right side panel. Users can switch model/provider from the header and keep a single conversation flow while browsing.
 
-### 3. Browser Control Toolbar
+### 2. Page reading
 
-Four toolbar buttons, always visible above the chat:
+Hermes reads the current page and sends structured content to the selected model when the user asks for help. It can preserve headings, forms, and important content blocks better than a simple raw-text dump.
 
-| Button | Action |
-|--------|--------|
-| 📷 | Take a screenshot of the current tab and show inline in chat |
-| 🌐 | Pre-fill "navigate to " command in input box |
-| 🖱️ | Pre-fill "click " command for CSS-selector clicking |
-| ✏️ | Pre-fill "fill " command for form field filling |
+### 3. Browser actions
 
-Chat commands also work directly:
+Hermes supports user-invoked browser actions through the side panel:
 
-```
-截图                         → screenshot current page
-导航到 https://example.com   → navigate active tab
-点击 #submit-button          → click element by CSS selector
-填写 #email user@example.com → fill input field
-向下滚动 / 向上滚动           → scroll the page
-```
+- `截图`
+- `导航到 https://example.com`
+- `点击 #submit`
+- `填写 #email user@example.com`
+- `向下滚动`
+- `读取页面`
 
-### 4. Smart Form Auto-Fill (AI-Powered)
+### 4. Form assistance
 
-The 📋 profile panel stores reusable information in four categories:
+Users can save reusable information such as:
 
-| Tab | Contents |
-|-----|----------|
-| 👤 Developer | Name, email, website, privacy policy URL, address |
-| 📱 App Description | Short description (multiple languages), long description, version notes |
-| ✅ Compliance Answers | Content rating, target audience, data collection policy, permission explanations |
-| 📝 Custom | Any additional key-value pairs |
+- developer details
+- app descriptions
+- compliance answers
+- custom notes
 
-**Auto-fill flow:**
-1. Open the profile panel (📋 button in header)
-2. Fill in your info once — saved permanently to local storage
-3. Navigate to any web form
-4. Click **🤖 Scan current page and auto-fill**
-5. The extension scans all visible form fields (input, textarea, select), sends the structure to the AI along with your stored profile, receives a fill plan, and executes it field by field
+Then Hermes can scan visible fields on a page and generate an AI-assisted fill plan.
 
-Works on any website — Google Play Console, App Store Connect, company intranets, registration forms, etc. Uses generic DOM scanning, not site-specific code.
+### 5. File and screenshot context
 
-### 5. Image Paste & Vision Analysis
+Users can:
 
-Users can send screenshots directly to the AI for visual analysis:
+- upload text files
+- paste screenshots
+- upload screenshots directly
 
-- **Paste**: Copy a screenshot (system ⌘⇧4 on Mac, Win+Shift+S on Windows), then press ⌘V / Ctrl+V in the chat input
-- **Upload**: Click 🖼️ Image button → file picker
-- Up to **4 images per message**
-- Thumbnail preview strip shown before sending — click × to remove, click thumbnail to zoom
-- Images sent using each provider's native vision format (Anthropic `base64` source / OpenAI `image_url`)
-- Images not stored in conversation history (saves tokens)
+This is useful for store review flows, project README-driven form filling, and pages that are easier to explain visually.
 
-Use case: Take a system screenshot of a protected page (Chrome Web Store, PDF), paste it into the chat, ask the AI to analyze the form fields and draft fill content.
+### 6. Optional local Bridge mode
 
-### 6. Auto-Screenshot Injection
+Advanced users can connect a local Bridge service so an external Hermes Agent can send browser commands through the extension.
 
-When the user asks about page content (detected via keywords: fill, analyze table, see this page, form fields, etc.) or the page text is empty (SPA like Twitter/GitHub), the extension automatically:
+The Bridge is local-only by design.
 
-1. Takes a screenshot of the current tab
-2. Attaches it to the AI message alongside the text
-3. Lets the AI "see" the page visually
+## Installation
 
-This runs silently in the background and only triggers for relevant queries.
+### Option 1: Load unpacked during development
 
-### 7. Quick Action Buttons
+1. Open `chrome://extensions`
+2. Enable `Developer mode`
+3. Click `Load unpacked`
+4. Select this project folder
 
-Five one-click shortcuts in the toolbar below the page context bar:
+### Option 2: Use a packaged ZIP
 
-- 📝 Summarize — summarize the page in Chinese
-- 🔑 Key Points — extract 5 key points as a list
-- 🌐 Translate — translate main content to Chinese
-- 🔬 Analyze — deep analysis of arguments, data, and conclusions
-- ❓ Explain — explain core concepts in plain language
+This repository may include packaged ZIP files for review or testing, but the recommended open-source workflow is to load the project unpacked while developing.
 
-### 8. Bridge Mode (Advanced / Optional)
+## Quick Start
 
-For users running a local Hermes Agent, the extension can connect via WebSocket:
+1. Load the extension in Chrome
+2. Open the Hermes side panel
+3. Go to `Settings`
+4. Paste an API key for one provider
+5. Open any normal webpage
+6. Ask Hermes to summarize, analyze, or interact with the page
 
-```bash
-pip3 install websockets
-python3 bridge-server.py --port 8643
+Example prompts:
+
+```text
+请总结这个页面
+帮我提取这页的卖点
+截图
+导航到 https://github.com
+点击 text=Sign in
+填写 #email hello@example.com
 ```
 
-Then in Settings → Bridge section → Connect. The agent can then send browser commands (navigate, click, fill, screenshot, extract, scroll, tab management) to the extension remotely. This is fully optional — all other features work without it.
+## Local Development
 
----
+This project does not require a complex build step. The extension is currently plain HTML, CSS, and JavaScript.
 
-## Permissions Used
+Main files:
 
-| Permission | Why |
-|-----------|-----|
-| `activeTab` | Read page content and take screenshots when user triggers an action |
-| `tabs` | Get current tab URL and title for page context; navigate tabs |
-| `storage` | Save API keys, model selection, conversation history, and profile data locally |
-| `sidePanel` | Display the AI chat panel on the right side of the browser |
-| `contextMenus` | Add "Summarize with Hermes AI" and "Analyze with Hermes AI" to the right-click menu |
-| `alarms` | Keep the service worker alive for Bridge WebSocket reconnection |
-| `scripting` | Inject content script into pages that didn't load it automatically |
-| `<all_urls>` (host) | Read page content and interact with elements on any website |
-| `api.deepseek.com` | DeepSeek AI API calls |
-| `api.openai.com` | OpenAI API calls |
-| `api.anthropic.com` | Anthropic Claude API calls |
-| `generativelanguage.googleapis.com` | Google Gemini API calls |
-| `api.x.ai` | xAI Grok API calls |
-| `api.moonshot.ai` / `api.moonshot.cn` | Kimi (Moonshot) API calls |
-
-All API calls go directly from the user's browser to the selected provider using the user's own API key. No proxy, no backend, no data collection.
-
----
-
-## Privacy
-
-- **No data collection** — nothing is sent to any server controlled by Hermes
-- **User-owned API keys** — keys stored in Chrome local storage, never transmitted except to the chosen AI provider
-- **No analytics or tracking** — no telemetry, no crash reporting, no usage metrics
-- **Page content stays local** — page text is included in AI requests only when the user initiates a query; it is not cached or stored beyond the conversation session
-- **Images not stored** — pasted images are used for the current message only, not saved to conversation history
-- **Bridge mode is local-only** — WebSocket connects to `127.0.0.1` only
-
-Privacy Policy source: `PRIVACY_POLICY.md`
-
----
+```text
+manifest.json
+service-worker.js
+content.js
+sidepanel/sidepanel.html
+sidepanel/sidepanel.js
+popup/popup.html
+popup/popup.js
+bridge-server.py
+```
 
 ## Architecture
 
-```
-Chrome Side Panel (sidepanel.js)
-    │
-    ├── AI Chat ──────────────────→ Provider API (DeepSeek / OpenAI / Claude / Gemini / Grok / Kimi)
-    │                                   ↑ Streaming SSE
-    ├── Browser Actions ──────────→ Service Worker (service-worker.js)
-    │   (screenshot, navigate,         │
-    │    click, fill, scan_forms)       └──→ Content Script (content.js)
-    │                                         DOM: read, click, fill, scroll, scan, structure
-    └── Bridge Mode (optional) ───→ WebSocket ws://127.0.0.1:8643 ←→ Hermes Agent
+```text
+Side Panel UI
+  -> provider API calls
+  -> service worker browser actions
+  -> content script DOM interaction
+  -> optional local Bridge service
 ```
 
-### File Structure
+More concretely:
 
-```
-hermes浏览器插件/
-├── manifest.json           MV3 extension manifest
-├── service-worker.js       Background: browser actions, Bridge WebSocket, tab capture
-├── content.js              Injected: DOM read, structured read, form scan, click, fill, scroll
-├── popup/
-│   ├── popup.html          Toolbar icon popup: open side panel, Bridge status
-│   └── popup.js
-├── sidepanel/
-│   ├── sidepanel.html      Main chat UI, model dropdown, toolbar, profile panel
-│   └── sidepanel.js        Chat logic, multi-provider streaming, vision, auto-fill orchestration
-├── icons/
-├── bridge-server.py        Optional local WebSocket server for Hermes Agent integration
-├── PRIVACY_POLICY.md
-├── store-submission.md
-└── README.md
+```text
+sidepanel/sidepanel.js
+  -> AI chat, settings, attachments, provider switching, auto-fill orchestration
+
+service-worker.js
+  -> action routing, tab access, screenshots, on-demand content-script injection, Bridge connection
+
+content.js
+  -> DOM read, click, fill, select, scroll, structured extraction, form scanning
+
+bridge-server.py
+  -> optional local WebSocket bridge for agent integration
 ```
 
----
+## Permissions and Privacy
 
-## Chrome Web Store Listing Copy
+Hermes is intentionally transparent about its permissions.
 
-### Short Description (≤132 characters)
-```
-AI chat & browser controller in a side panel. Multi-model (DeepSeek/GPT/Claude/Gemini/Grok/Kimi). Smart form auto-fill.
-```
+Permissions currently used:
 
-### Category
-Productivity
+- `activeTab`
+- `tabs`
+- `scripting`
+- `storage`
+- `sidePanel`
+- `contextMenus`
+- `"<all_urls>"` host permission
 
-### Single Purpose Statement
-```
-Hermes AI Assistant provides an AI-powered side panel chat that reads the current web page and lets users interact with it: ask questions, summarize content, and control the browser (navigate, screenshot, click, fill forms). Users configure their own API keys for supported AI providers; all processing happens between the user's browser and their chosen AI provider.
-```
+Why:
 
-### Detailed Description
-```
-Hermes AI Assistant — AI Chat & Browser Controller
+- page reading and interaction need website access
+- side panel UI needs `sidePanel`
+- on-demand DOM access needs `scripting`
+- local settings need `storage`
 
-Open the side panel (right-click the extension icon or click the toolbar button) to chat with your chosen AI model about any web page — and to control your browser directly from the panel.
+Important privacy model:
 
-🤖 Multi-Model AI Chat (requires your own API key)
-• Supports 6 providers: DeepSeek, OpenAI, GPT-5, Claude, Gemini, Grok, and Kimi
-• Switch provider and model with one click from the header badge
-• Streams responses with full Markdown rendering
-• Reads the page's structured content: headings, tables (as Markdown), and form fields
+- No developer-owned proxy for model requests
+- User API keys stay in Chrome local storage
+- Requests go directly from the browser to the chosen provider
+- Bridge mode talks only to a local endpoint such as `ws://127.0.0.1:8643`
 
-📋 Smart Form Auto-Fill
-• Store your profile once (developer info, app descriptions, compliance answers, custom fields)
-• On any form page, click 🤖 to scan all visible fields and have the AI match your data to the right fields
-• Works on any website: app store submissions, registration forms, company portals
+See:
 
-📷 Screenshot & Vision
-• Click 📷 or type "截图" to capture the current tab and view it inline in chat
-• Paste any system screenshot (⌘V / Ctrl+V) or upload an image file — it's sent to the AI as a vision message
-• Ideal for Chrome-protected pages that can't be read by the content script
+- [PRIVACY_POLICY.md](./PRIVACY_POLICY.md)
+- [docs/privacy-policy.html](./docs/privacy-policy.html)
 
-🖥️ Browser Actions
-• Navigate to any URL from the chat
-• Click elements by CSS selector
-• Fill form fields with human-like typing simulation
-• Direct commands: "导航到 google.com", "点击 #submit", "填写 #email test@example.com"
+## Current Limits
 
-🔌 Bridge Mode (Advanced, Optional)
-• Connect a local Hermes Agent via WebSocket for external browser automation
+- Chrome protected pages such as `chrome://` and some Web Store pages cannot be read like normal webpages
+- The extension still uses `"<all_urls>"` because page read/write is a core feature
+- Different AI providers have different model naming, rate limits, and authentication rules
+- The form auto-fill flow is generic and still benefits from contributor improvements on tricky sites
 
-🔒 Privacy First
-• Your API keys are stored locally in Chrome — never sent anywhere except your chosen AI provider
-• No tracking, no analytics, no backend
-• Page content is only included in AI requests when you initiate a query
-```
+## Open Source Direction
 
----
+This repository is being shaped into an open-source browser AI operator project.
 
-## Development
+Areas where contributions are especially useful:
 
-```bash
-# Load unpacked in Chrome
-# 1. Open chrome://extensions
-# 2. Enable Developer mode
-# 3. Click "Load unpacked" → select this directory
+- better prompt engineering for browser actions
+- safer permission minimization
+- stronger form understanding
+- more resilient DOM targeting
+- better UX copy and onboarding
+- real-world site compatibility fixes
+- tests, docs, and bug reports
 
-# After code changes: click the ↺ refresh button on the extension card
-```
+See:
 
-Built for Hermes Agent users and power users who want AI in their browser without switching windows.
+- [CONTRIBUTING.md](./CONTRIBUTING.md)
+- [ROADMAP.md](./ROADMAP.md)
+
+## Roadmap Snapshot
+
+Near-term priorities:
+
+- improve open-source documentation and contributor workflow
+- make page reading and action execution more reliable
+- improve structured extraction and fill-plan quality
+- reduce permission footprint where possible without breaking the core product
+- make Bridge mode easier to set up and test
+
+## Contributing
+
+Contributions are welcome.
+
+If you want to help:
+
+1. Open an issue with the page/site/workflow you want to improve
+2. Explain the bug, limitation, or desired UX
+3. Submit a focused pull request
+
+Before opening a PR:
+
+- keep changes small and reviewable
+- preserve the local-first privacy model
+- avoid adding remote proxy services
+- document any permission changes clearly
+
+Detailed guide:
+
+- [CONTRIBUTING.md](./CONTRIBUTING.md)
+
+## Repository Docs
+
+Public docs and store-facing materials:
+
+- [docs/index.html](./docs/index.html)
+- [docs/privacy-policy.html](./docs/privacy-policy.html)
+- [store-submission.md](./store-submission.md)
+- [store-privacy.md](./store-privacy.md)
+
+Promotion drafts:
+
+- [PROMOTION/product-hunt-draft.md](./PROMOTION/product-hunt-draft.md)
+- [PROMOTION/reddit-posts.md](./PROMOTION/reddit-posts.md)
+- [PROMOTION/v2ex-post.md](./PROMOTION/v2ex-post.md)
+- [PROMOTION/awesome-list-pr.md](./PROMOTION/awesome-list-pr.md)
+
+## License
+
+This repository is licensed under the MIT License.
+
+See [LICENSE](./LICENSE).
