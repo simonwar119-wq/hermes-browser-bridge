@@ -49,7 +49,7 @@ agent_actions_lock = threading.Lock()
 # ============================================================
 
 async def handle_extension(ws):
-    global ext_ws, ext_connected
+    global ext_ws, ext_connected, pending_agent_actions
     ext_ws = ws
     ext_connected = True
     log.info('⚡ Extension connected')
